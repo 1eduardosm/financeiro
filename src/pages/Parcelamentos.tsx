@@ -3,108 +3,250 @@ import { db, auth } from "../firebase";
 import { doc, updateDoc, arrayUnion } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
+interface Parcela {
+  valor: number;
+  vencimento?: string; // opcional
+}
+
+interface Compra {
+  nome: string;
+  parcelas: Parcela[];
+}
+
+interface Fatura {
+  valor: number;
+  vencimento: string;
+}
+
+interface Cartao {
+  nome: string;
+  faturas: Fatura[];
+}
+
 export default function Parcelamentos() {
-  const [modo, setModo] = useState<"quantidade" | "faturas">("quantidade");
-  const [quantidade, setQuantidade] = useState(0);
-  const [faturas, setFaturas] = useState<{ valor: number; vencimento: string }[]>([]);
-  const [novoValor, setNovoValor] = useState(0);
-  const [novaData, setNovaData] = useState("");
+  const [modo, setModo] = useState<"compra" | "fatura">("compra");
+
+  // Estado para compras
+  const [compras, setCompras] = useState<Compra[]>([]);
+  const [novaCompraNome, setNovaCompraNome] = useState("");
+  const [parcelasCompra, setParcelasCompra] = useState<Parcela[]>([]);
+  const [novoValorParcela, setNovoValorParcela] = useState(0);
+
+  // Estado para faturas
+  const [cartoes, setCartoes] = useState<Cartao[]>([]);
+  const [novoCartaoNome, setNovoCartaoNome] = useState("");
+  const [cartaoSelecionado, setCartaoSelecionado] = useState<number | null>(null);
+  const [novoValorFatura, setNovoValorFatura] = useState(0);
+  const [novaDataFatura, setNovaDataFatura] = useState("");
+
   const navigate = useNavigate();
 
-  const salvarParcelamento = async (parcelamento: any) => {
+  const salvarCompra = async (compra: Compra) => {
     const user = auth.currentUser;
     if (!user) {
       alert("Usuário não logado!");
       navigate("/login");
       return;
     }
-
-    const uid = user.uid;
-
     try {
-      await updateDoc(doc(db, "usuarios", uid), {
-        parcelamentos: arrayUnion(parcelamento),
+      await updateDoc(doc(db, "usuarios", user.uid), {
+        compras: arrayUnion(compra),
         parcelamentosAtivos: true,
       });
     } catch (error: any) {
-      console.error(error);
-      alert("Erro ao salvar parcelamento: " + error.message);
+      alert("Erro ao salvar compra: " + error.message);
     }
   };
 
+  const salvarCartao = async (cartao: Cartao) => {
+    const user = auth.currentUser;
+    if (!user) {
+      alert("Usuário não logado!");
+      navigate("/login");
+      return;
+    }
+    try {
+      await updateDoc(doc(db, "usuarios", user.uid), {
+        parcelamentos: arrayUnion(cartao),
+        parcelamentosAtivos: true,
+      });
+    } catch (error: any) {
+      alert("Erro ao salvar cartão: " + error.message);
+    }
+  };
+
+  // Funções Compras
+  const adicionarParcelaCompra = () => {
+    if (!novoValorParcela) return;
+    setParcelasCompra([...parcelasCompra, { valor: novoValorParcela }]);
+    setNovoValorParcela(0);
+  };
+
+  const adicionarCompra = () => {
+    if (!novaCompraNome || parcelasCompra.length === 0) return;
+    const nova = { nome: novaCompraNome, parcelas: parcelasCompra };
+    setCompras([...compras, nova]);
+    salvarCompra(nova);
+    setNovaCompraNome("");
+    setParcelasCompra([]);
+  };
+
+  // Funções Faturas
+  const adicionarCartao = () => {
+    if (!novoCartaoNome) return;
+    const novo = { nome: novoCartaoNome, faturas: [] };
+    setCartoes([...cartoes, novo]);
+    setNovoCartaoNome("");
+  };
+
   const adicionarFatura = () => {
-    if (!novoValor || !novaData) return;
-    const fatura = { valor: novoValor, vencimento: novaData };
-    setFaturas([...faturas, fatura]);
-    setNovoValor(0);
-    setNovaData("");
-    salvarParcelamento(fatura);
+    if (cartaoSelecionado === null || !novoValorFatura || !novaDataFatura) return;
+    const updatedCartoes = [...cartoes];
+    updatedCartoes[cartaoSelecionado].faturas.push({ valor: novoValorFatura, vencimento: novaDataFatura });
+    setCartoes(updatedCartoes);
+    salvarCartao(updatedCartoes[cartaoSelecionado]);
+    setNovoValorFatura(0);
+    setNovaDataFatura("");
   };
 
   const finalizar = () => {
+    alert("Parcelamentos salvos!");
     navigate("/dashboard");
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "400px", margin: "50px auto" }}>
+    <div style={{ display: "flex", flexDirection: "column", width: "500px", margin: "50px auto" }}>
       <h1>Parcelamentos</h1>
 
       <div style={{ marginBottom: "20px" }}>
-        <button onClick={() => setModo("quantidade")}>Quantos parcelamentos tenho?</button>
-        <button onClick={() => setModo("faturas")}>Informar próximas faturas</button>
+        <button onClick={() => setModo("compra")} style={{ marginRight: "10px" }}>
+          Informar por compra
+        </button>
+        <button onClick={() => setModo("fatura")}>Informar por fatura</button>
       </div>
 
-      {modo === "quantidade" && (
-        <div>
-          <label>Quantidade de compras parceladas ativas:</label>
+      {modo === "compra" && (
+        <div style={{ border: "1px solid #ccc", padding: "15px", borderRadius: "8px" }}>
+          <h2>Nova Compra</h2>
+          <label>Nome da compra:</label>
+          <input
+            type="text"
+            value={novaCompraNome}
+            onChange={(e) => setNovaCompraNome(e.target.value)}
+            style={{ padding: "8px", marginBottom: "10px", width: "100%" }}
+          />
+          <label>Adicionar parcelas:</label>
           <input
             type="number"
-            value={quantidade}
-            onChange={(e) => setQuantidade(Number(e.target.value))}
-            style={{ padding: "8px", marginTop: "5px", marginBottom: "10px" }}
+            value={novoValorParcela}
+            onChange={(e) => setNovoValorParcela(Number(e.target.value))}
+            style={{ padding: "8px", marginBottom: "10px", width: "100%" }}
           />
-          <button
-            onClick={() => {
-              for (let i = 0; i < quantidade; i++) {
-                salvarParcelamento({ descricao: `Compra parcelada ${i + 1}`, valorTotal: 0, parcelasTotais: 1, parcelasPagas: 0, valorParcela: 0, dataInicio: new Date().toISOString() });
-              }
-              alert("Parcelamentos adicionados!");
-            }}
-            style={{ padding: "10px" }}
-          >
-            Salvar quantidade
+          <button onClick={adicionarParcelaCompra} style={{ padding: "10px", marginBottom: "10px" }}>
+            Adicionar parcela
           </button>
+          {parcelasCompra.length > 0 && (
+            <ul>
+              {parcelasCompra.map((p, i) => (
+                <li key={i}>R$ {p.valor.toFixed(2)}</li>
+              ))}
+            </ul>
+          )}
+          <button onClick={adicionarCompra} style={{ padding: "10px", marginTop: "10px" }}>
+            Salvar compra
+          </button>
+
+          {compras.length > 0 && (
+            <>
+              <h3>Compras adicionadas:</h3>
+              <ul>
+                {compras.map((c, idx) => (
+                  <li key={idx}>
+                    {c.nome} - Parcelas: {c.parcelas.map((p) => `R$${p.valor.toFixed(2)}`).join(", ")}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
 
-      {modo === "faturas" && (
-        <div>
-          <label>Valor da fatura:</label>
+      {modo === "fatura" && (
+        <div style={{ border: "1px solid #ccc", padding: "15px", borderRadius: "8px" }}>
+          <h2>Adicionar Cartão</h2>
           <input
-            type="number"
-            value={novoValor}
-            onChange={(e) => setNovoValor(Number(e.target.value))}
-            style={{ padding: "8px", marginBottom: "10px" }}
+            type="text"
+            placeholder="Nome do cartão"
+            value={novoCartaoNome}
+            onChange={(e) => setNovoCartaoNome(e.target.value)}
+            style={{ padding: "8px", marginBottom: "10px", width: "100%" }}
           />
-          <label>Data de vencimento:</label>
-          <input
-            type="date"
-            value={novaData}
-            onChange={(e) => setNovaData(e.target.value)}
-            style={{ padding: "8px", marginBottom: "10px" }}
-          />
-          <button onClick={adicionarFatura} style={{ padding: "10px", marginBottom: "10px" }}>
-            Adicionar fatura
+          <button onClick={adicionarCartao} style={{ padding: "10px", marginBottom: "10px" }}>
+            Adicionar cartão
           </button>
 
-          {faturas.length > 0 && (
-            <ul>
-              {faturas.map((f, index) => (
-                <li key={index}>
-                  R$ {f.valor.toFixed(2)} - Vencimento: {f.vencimento}
-                </li>
-              ))}
-            </ul>
+          {cartoes.length > 0 && (
+            <>
+              <label>Selecionar cartão:</label>
+              <select
+                value={cartaoSelecionado ?? ""}
+                onChange={(e) => setCartaoSelecionado(Number(e.target.value))}
+                style={{ padding: "8px", marginBottom: "10px", width: "100%" }}
+              >
+                <option value="" disabled>
+                  -- Escolha um cartão --
+                </option>
+                {cartoes.map((c, i) => (
+                  <option key={i} value={i}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {cartaoSelecionado !== null && (
+            <div>
+              <label>Valor da fatura:</label>
+              <input
+                type="number"
+                value={novoValorFatura}
+                onChange={(e) => setNovoValorFatura(Number(e.target.value))}
+                style={{ padding: "8px", marginBottom: "10px", width: "100%" }}
+              />
+              <label>Data de vencimento:</label>
+              <input
+                type="date"
+                value={novaDataFatura}
+                onChange={(e) => setNovaDataFatura(e.target.value)}
+                style={{ padding: "8px", marginBottom: "10px", width: "100%" }}
+              />
+              <button onClick={adicionarFatura} style={{ padding: "10px", marginBottom: "10px" }}>
+                Adicionar fatura
+              </button>
+
+              <ul>
+                {cartoes[cartaoSelecionado].faturas.map((f, idx) => (
+                  <li key={idx}>
+                    R$ {f.valor.toFixed(2)} - Vencimento: {f.vencimento}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {cartoes.length > 0 && (
+            <>
+              <h3>Cartões adicionados:</h3>
+              <ul>
+                {cartoes.map((c, idx) => (
+                  <li key={idx}>
+                    {c.nome} - Faturas:{" "}
+                    {c.faturas.map((f) => `R$${f.valor.toFixed(2)} (${f.vencimento})`).join(", ")}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}
