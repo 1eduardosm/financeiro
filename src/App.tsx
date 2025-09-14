@@ -1,26 +1,37 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { Routes, Route, Navigate } from "react-router-dom";
+import Login from "./pages/Login";
+import Setup from "./pages/Setup";
+import Parcelamentos from "./pages/Parcelamentos";
+import Dashboard from "./pages/Dashboard";
 
-function App() {
+export default function App() {
+  // Aqui você verifica se o usuário está logado (ex: localStorage ou estado global)
+  const isLoggedIn = !!localStorage.getItem("userToken"); 
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Routes>
+      {/* Rota de login sempre acessível */}
+      <Route path="/login" element={<Login />} />
+
+      {/* Rotas protegidas: só acessíveis se estiver logado */}
+      <Route
+        path="/setup"
+        element={isLoggedIn ? <Setup /> : <Navigate to="/login" />}
+      />
+      <Route
+        path="/parcelamentos"
+        element={isLoggedIn ? <Parcelamentos /> : <Navigate to="/login" />}
+      />
+      <Route
+        path="/dashboard"
+        element={isLoggedIn ? <Dashboard /> : <Navigate to="/login" />}
+      />
+
+      {/* Redireciona qualquer rota desconhecida */}
+      <Route
+        path="*"
+        element={<Navigate to={isLoggedIn ? "/dashboard" : "/login"} />}
+      />
+    </Routes>
   );
 }
-
-export default App;
