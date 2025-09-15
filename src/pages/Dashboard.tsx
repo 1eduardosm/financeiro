@@ -207,7 +207,7 @@ export default function Dashboard() {
             );
           })
         ) : (
-          <p>Nenhum cartão cadastrado.</p>
+          <p>não há cartão cadastrado.</p>
         )}
       </div>
 
