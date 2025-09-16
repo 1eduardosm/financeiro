@@ -265,7 +265,7 @@ export default function Dashboard() {
             ))}
           </ul>
         ) : (
-          <p>Nenhuma entrada registrada ainda.</p>
+          <p>Nenhuma entrada registrada até agr.</p>
         )}
       </div>
     </div>
