@@ -38,19 +38,20 @@ export default function Setup() {
   const [novoSaldo, setNovoSaldo] = useState<number>(0);
   const [novoTemParcelamentos, setNovoTemParcelamentos] = useState(false);
 
-  // Campos para modo compra
-  const [modoAtual, setModoAtual] = useState<"compra" | "fatura" | null>(null);
+  // Campos para compras
   const [novaCompraNome, setNovaCompraNome] = useState("");
   const [novoValorParcela, setNovoValorParcela] = useState<number>(0);
   const [novaDataParcela, setNovaDataParcela] = useState<string>("");
   const [parcelasCompra, setParcelasCompra] = useState<Parcela[]>([]);
 
-  // Campos para modo fatura
+  // Campos para faturas
   const [novoValorFatura, setNovoValorFatura] = useState<number>(0);
   const [novaDataFatura, setNovaDataFatura] = useState<string>("");
 
   const adicionarConta = () => {
-    if (!novaContaNome || novoSaldo === undefined) return alert("Preencha o nome e saldo da conta.");
+    if (!novaContaNome || novoSaldo === undefined) {
+      return alert("Preencha o nome e saldo da conta.");
+    }
     const novaConta: Conta = {
       nome: novaContaNome,
       saldo: novoSaldo,
@@ -60,14 +61,15 @@ export default function Setup() {
     };
     setContas([...contas, novaConta]);
     setContaAtualIndex(contas.length);
+
     // reset campos
     setNovaContaNome("");
     setNovoSaldo(0);
     setNovoTemParcelamentos(false);
-    setModoAtual(null);
     setParcelasCompra([]);
     setNovaCompraNome("");
     setNovoValorFatura(0);
+    setNovaDataFatura("");
   };
 
   const selecionarModo = (modo: "compra" | "fatura") => {
@@ -75,24 +77,28 @@ export default function Setup() {
     const novasContas = [...contas];
     novasContas[contaAtualIndex].modo = modo;
     setContas(novasContas);
-    setModoAtual(modo);
   };
 
   // Funções compras
   const adicionarParcela = () => {
-    if (!novoValorParcela || !novaDataParcela) return alert("Preencha valor e data da parcela.");
+    if (!novoValorParcela || !novaDataParcela) {
+      return alert("Preencha valor e data da parcela.");
+    }
     setParcelasCompra([...parcelasCompra, { valor: novoValorParcela, vencimento: novaDataParcela }]);
     setNovoValorParcela(0);
     setNovaDataParcela("");
   };
 
   const salvarCompra = () => {
-    if (!novaCompraNome || parcelasCompra.length === 0) return alert("Preencha nome e parcelas da compra.");
+    if (!novaCompraNome || parcelasCompra.length === 0) {
+      return alert("Preencha nome e parcelas da compra.");
+    }
     if (contaAtualIndex === null) return;
     const novasContas = [...contas];
     const compra: Compra = { nome: novaCompraNome, parcelas: parcelasCompra };
     novasContas[contaAtualIndex].compras!.push(compra);
     setContas(novasContas);
+
     // reset campos
     setNovaCompraNome("");
     setParcelasCompra([]);
@@ -100,11 +106,14 @@ export default function Setup() {
 
   // Funções faturas
   const adicionarFatura = () => {
-    if (!novoValorFatura || !novaDataFatura) return alert("Preencha valor e data da fatura.");
+    if (!novoValorFatura || !novaDataFatura) {
+      return alert("Preencha valor e data da fatura.");
+    }
     if (contaAtualIndex === null) return;
     const novasContas = [...contas];
     novasContas[contaAtualIndex].faturas!.push({ valor: novoValorFatura, vencimento: novaDataFatura });
     setContas(novasContas);
+
     setNovoValorFatura(0);
     setNovaDataFatura("");
   };
