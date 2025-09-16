@@ -5,177 +5,111 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword 
 } from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [modo, setModo] = useState<"Login" | "Registro">("Registro");
-  const [fase, setFase] = useState<"loginRegistro" | "primeiraVez">("loginRegistro");
-  const [uidAtual, setUidAtual] = useState<string | null>(null);
-  const [parcelamentos, setParcelamentos] = useState<boolean | null>(null);
-
+  const [modo, setModo] = useState<"login" | "registro">("login");
   const navigate = useNavigate();
 
-  // Função que redireciona o usuário conforme o fluxo correto
-  const redirecionarUsuario = async (uid: string) => {
-    const userRef = doc(db, "usuarios", uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists() || userSnap.data()?.saldo === undefined) {
-      // Usuário precisa configurar saldo inicial
-      navigate("/setup");
-      return;
-    }
-
-    const jaInformou = userSnap.data()?.jaInformouParcelamentos;
-    const temParcelamentos = userSnap.data()?.temParcelamentos;
-
-    if (jaInformou === false || jaInformou === undefined) {
-      // Usuário nunca informou → mostrar tela de primeira vez
-      setUidAtual(uid);
-      setFase("primeiraVez");
-    } else {
-      // Usuário já informou → ir direto para dashboard ou parcelamentos
-      if (temParcelamentos) {
-        navigate("/parcelamentos");
-      } else {
-        navigate("/dashboard");
-      }
-    }
-  };
-
-  // Registro
-  const handleRegistro = async () => {
+  // Registro de usuário
+  const handleRegistro = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, senha);
-      const uid = userCredential.user.uid;
+      const cred = await createUserWithEmailAndPassword(auth, email, senha);
+      const user = cred.user;
 
-      await setDoc(doc(db, "usuarios", uid), {
-        email: email,
-        saldo: 0,
-        jaInformouParcelamentos: false, // ainda não informou
-        temParcelamentos: null,          // null = sem escolha inicial
-        criadoEm: new Date()
+      // Cria doc inicial no Firestore
+      await setDoc(doc(db, "usuarios", user.uid), {
+        email: user.email,
+        criadoEm: new Date().toISOString(),
+        jaFezSetup: false,
       });
 
-      localStorage.setItem("userToken", uid);
-      setUidAtual(uid);
-      setFase("primeiraVez"); // força tela de primeira vez
-    } catch (error: any) {
-      console.error(error);
-      if (error.code === "auth/email-already-in-use") {
-        alert("Esse email já está em uso. Tente fazer login.");
-        setModo("Login");
-      } else if (error.code === "auth/weak-password") {
-        alert("Senha muito fraca. Use no mínimo 6 caracteres.");
-      } else {
-        alert("Erro ao registrar usuário: " + error.message);
-      }
+      alert("Conta registrada com sucesso!");
+      navigate("/setup");
+    } catch (err: any) {
+      alert("Erro ao registrar: " + err.message);
     }
   };
 
-  // Login
-  const handleLogin = async () => {
+  // Login de usuário
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, senha);
-      const uid = userCredential.user.uid;
+      const cred = await signInWithEmailAndPassword(auth, email, senha);
+      const user = cred.user;
 
-      localStorage.setItem("userToken", uid);
-      await redirecionarUsuario(uid);
-    } catch (error: any) {
-      console.error(error);
-      if (error.code === "auth/user-not-found") {
-        alert("Usuário não encontrado. Verifique o email ou registre-se.");
-      } else if (error.code === "auth/wrong-password") {
-        alert("Senha incorreta. Tente novamente.");
+      // Verifica se já tem setup feito
+      const ref = doc(db, "usuarios", user.uid);
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        const dados = snap.data();
+        console.log("dado: ", dados)
+        if (dados.jaFezSetup) {
+          navigate("/dashboard"); // já configurado → dashboard
+        } else {
+          navigate("/setup"); // não configurado ainda
+        }
       } else {
-        alert("Erro ao fazer login: " + error.message);
+        navigate("/setup");
       }
+    } catch (err: any) {
+      alert("Erro ao fazer login: " + err.message);
     }
   };
 
-  // Confirmar escolha da primeira vez
-  const confirmarParcelamentos = async () => {
-    if (parcelamentos === null || !uidAtual) return alert("Selecione uma opção!");
-
-    const userRef = doc(db, "usuarios", uidAtual);
-    await updateDoc(userRef, {
-      temParcelamentos: parcelamentos,
-      jaInformouParcelamentos: true
-    });
-
-    // Redireciona após a escolha
-    navigate("/dashboard");
-  };
-
-  // Tela de primeira vez
-  if (fase === "primeiraVez") {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", width: "300px", margin: "50px auto" }}>
-        <h1>Você tem faturas ou compras parceladas pendentes?</h1>
-
-        <button 
-          onClick={() => setParcelamentos(true)} 
-          style={{ 
-            margin: "10px", padding: "10px", 
-            backgroundColor: parcelamentos === true ? "#860204" : "#ccc", 
-            color: "#fff" 
-          }}
-        >
-          Sim
-        </button>
-
-        <button 
-          onClick={() => setParcelamentos(false)} 
-          style={{ 
-            margin: "10px", padding: "10px", 
-            backgroundColor: parcelamentos === false ? "#860204" : "#ccc", 
-            color: "#fff" 
-          }}
-        >
-          Não tenho faturas ou parcelamentos pendentes
-        </button>
-
-        <button onClick={confirmarParcelamentos} style={{ marginTop: "20px", padding: "10px" }}>
-          Confirmar
-        </button>
-      </div>
-    );
-  }
-
-  // Tela de login/registro
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "300px", margin: "50px auto" }}>
-      <h1>{modo === "Registro" ? "Registro" : "Login"}</h1>
+    <div style={{ maxWidth: "400px", margin: "50px auto", padding: "20px" }}>
+      <h1>{modo === "login" ? "Login" : "Registro"}</h1>
+      <form onSubmit={modo === "login" ? handleLogin : handleRegistro}>
+        <input
+          type="email"
+          placeholder="E-mail"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
+        />
+        <input
+          type="password"
+          placeholder="Senha"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+          style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
+        />
+        <button
+          type="submit"
+          style={{ width: "100%", padding: "12px", backgroundColor: "#860204", color: "#fff" }}
+        >
+          {modo === "login" ? "Entrar" : "Registrar"}
+        </button>
+      </form>
 
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ marginBottom: "10px", padding: "8px" }}
-      />
-      <input
-        type="password"
-        placeholder="Senha"
-        value={senha}
-        onChange={(e) => setSenha(e.target.value)}
-        style={{ marginBottom: "10px", padding: "8px" }}
-      />
-
-      {modo === "Registro" ? (
-        <button onClick={handleRegistro} style={{ padding: "10px" }}>Registrar</button>
-      ) : (
-        <button onClick={handleLogin} style={{ padding: "10px" }}>Entrar</button>
-      )}
-
-      <button
-        onClick={() => setModo(modo === "Registro" ? "Login" : "Registro")}
-        style={{ marginTop: "10px", padding: "6px" }}
-      >
-        {modo === "Registro" ? "Já tem conta? Faça Login" : "Não tem conta? Registre-se"}
-      </button>
+      <div style={{ marginTop: "15px", textAlign: "center" }}>
+        {modo === "login" ? (
+          <p>
+            Não tem conta?{" "}
+            <button
+              onClick={() => setModo("registro")}
+              style={{ border: "none", background: "transparent", color: "#860204", cursor: "pointer" }}
+            >
+              Registre-se
+            </button>
+          </p>
+        ) : (
+          <p>
+            Já tem conta?{" "}
+            <button
+              onClick={() => setModo("login")}
+              style={{ border: "none", background: "transparent", color: "#860204", cursor: "pointer" }}
+            >
+              Faça login
+            </button>
+          </p>
+        )}
+      </div>
     </div>
   );
 }

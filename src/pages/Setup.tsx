@@ -126,16 +126,20 @@ export default function Setup() {
       return;
     }
     try {
+      // Se pelo menos 1 conta tiver parcelamentos ativos
+      const temAlgumParcelamento = contas.some((c) => c.temParcelamentos);
+
       await setDoc(
         doc(db, "usuarios", user.uid),
         {
           contas,
           dataInicio: new Date().toISOString(),
+          jaFezSetup: true, // 🔥 chave usada no login para redirecionar
         },
         { merge: true }
       );
       alert("Configuração salva com sucesso!");
-      navigate("/dashboard");
+      navigate("/Dashboard");
     } catch (error: any) {
       console.error(error);
       alert("Erro ao salvar configuração: " + error.message);
@@ -293,22 +297,19 @@ export default function Setup() {
             </button>
           </div>
           {contaAtual.faturas && contaAtual.faturas.length > 0 && (
-            <>
-              <h4>Faturas adicionadas:</h4>
-              <ul>
-                {contaAtual.faturas.map((f, i) => (
-                  <li key={i}>
-                    R$ {f.valor.toFixed(2)} - Vencimento: {f.vencimento}
-                  </li>
-                ))}
-              </ul>
-            </>
+            <ul>
+              {contaAtual.faturas.map((f, i) => (
+                <li key={i}>
+                  R$ {f.valor.toFixed(2)} - {f.vencimento}
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
 
       {contas.length > 0 && (
-        <button onClick={finalizarSetup} style={{ padding: "12px", marginTop: "20px" }}>
+        <button onClick={finalizarSetup} style={{ padding: "15px", backgroundColor: "#4caf50", color: "#fff" }}>
           Finalizar Configuração
         </button>
       )}
