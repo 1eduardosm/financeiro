@@ -1,16 +1,31 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
-import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+
+type Parcela = {
+  valor: number;
+  vencimento?: string;
+  pago?: boolean;
+};
+
+type Compra = {
+  nome: string;
+  parcelas: Parcela[];
+};
 
 type Fatura = {
   valor: number;
   vencimento: string;
-  pago: boolean;
+  pago?: boolean;
 };
 
-type Cartao = {
+type Conta = {
   nome: string;
-  faturas: Fatura[];
+  saldo: number;
+  temParcelamentos: boolean;
+  modo?: "compra" | "fatura";
+  compras?: Compra[];
+  faturas?: Fatura[];
 };
 
 type Entrada = {
@@ -21,12 +36,12 @@ type Entrada = {
 
 export default function Dashboard() {
   const [saldo, setSaldo] = useState<number>(0);
-  const [cartoes, setCartoes] = useState<Cartao[]>([]);
+  const [contas, setContas] = useState<Conta[]>([]);
   const [entradas, setEntradas] = useState<Entrada[]>([]);
   const [historicoDescricoes, setHistoricoDescricoes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Campos do formulário de entrada
+  // Campos de entrada
   const [valorEntrada, setValorEntrada] = useState<number>(0);
   const [descricaoEntrada, setDescricaoEntrada] = useState<string>("");
   const [dataEntrada, setDataEntrada] = useState<string>("");
@@ -38,49 +53,45 @@ export default function Dashboard() {
       if (!uid) return;
 
       try {
-        const ref = doc(db, "usuarios", uid);
-        const snap = await getDoc(ref);
+        const snap = await getDoc(doc(db, "usuarios", uid));
+        if (!snap.exists()) return;
 
-        if (snap.exists()) {
-          const data = snap.data();
-          setSaldo(typeof data.saldo === "number" ? data.saldo : 0);
+        const data = snap.data();
 
-          // Cartões e faturas
-          const userCartoes: Cartao[] = [];
-          (data.parcelamentos ?? []).forEach((c: any) => {
-            let existente = userCartoes.find(cart => cart.nome === c.nome);
-            if (!existente) {
-              existente = { nome: c.nome ?? "Cartão sem nome", faturas: [] };
-              userCartoes.push(existente);
-            }
+        setSaldo(typeof data.saldo === "number" ? data.saldo : 0);
 
-            (c.faturas ?? []).forEach((f: any) => {
-              const jaExiste = existente!.faturas.some(
-                ft => ft.vencimento === f.vencimento && ft.valor === f.valor
-              );
-              if (!jaExiste) {
-                existente!.faturas.push({
-                  valor: typeof f.valor === "number" ? f.valor : 0,
-                  vencimento: f.vencimento ?? "Sem vencimento",
-                  pago: f.pago ?? false,
-                });
-              }
-            });
-          });
-          setCartoes(userCartoes);
+        // Contas
+        const userContas: Conta[] = (data.contas ?? []).map((c: any) => ({
+          nome: c.nome,
+          saldo: c.saldo,
+          temParcelamentos: c.temParcelamentos,
+          modo: c.modo,
+          compras: c.compras?.map((comp: any) => ({
+            nome: comp.nome,
+            parcelas: comp.parcelas?.map((p: any) => ({
+              valor: Number(p.valor) ?? 0,
+              vencimento: p.vencimento ?? "",
+              pago: p.pago ?? false,
+            })) ?? [],
+          })) ?? [],
+          faturas: c.faturas?.map((f: any) => ({
+            valor: Number(f.valor) ?? 0,
+            vencimento: f.vencimento ?? "",
+            pago: f.pago ?? false,
+          })) ?? [],
+        }));
+        setContas(userContas);
 
-          // Entradas existentes
-          const entradasExistentes: Entrada[] = (data.entradas ?? []).map((e: any) => ({
-            valor: typeof e.valor === "number" ? e.valor : 0,
-            descricao: String(e.descricao ?? ""),
-            data: String(e.data ?? ""),
-          }));
-          setEntradas(entradasExistentes);
+        // Entradas
+        const entradasExistentes: Entrada[] = (data.entradas ?? []).map((e: any) => ({
+          valor: Number(e.valor) ?? 0,
+          descricao: e.descricao ?? "",
+          data: e.data ?? "",
+        }));
+        setEntradas(entradasExistentes);
 
-          // Histórico de descrições
-          const descricoes = Array.from(new Set(entradasExistentes.map(e => e.descricao)));
-          setHistoricoDescricoes(descricoes);
-        }
+        // Histórico de descrições
+        setHistoricoDescricoes(Array.from(new Set(entradasExistentes.map(e => e.descricao))));
       } catch (err) {
         console.error("Erro ao carregar:", err);
       } finally {
@@ -91,58 +102,85 @@ export default function Dashboard() {
     carregar();
   }, [uid]);
 
-  // Registrar nova entrada detalhada
+  // Registrar entrada
   const registrarEntrada = async () => {
     if (!uid || valorEntrada <= 0 || !descricaoEntrada || !dataEntrada) {
       return alert("Preencha todos os campos corretamente!");
     }
 
-    const novaEntrada: Entrada = {
-      valor: valorEntrada,
-      descricao: descricaoEntrada,
-      data: dataEntrada,
-    };
-
+    const novaEntrada: Entrada = { valor: valorEntrada, descricao: descricaoEntrada, data: dataEntrada };
     const novoSaldo = saldo + valorEntrada;
+
     setSaldo(novoSaldo);
     setEntradas(prev => [...prev, novaEntrada]);
+    if (!historicoDescricoes.includes(descricaoEntrada)) setHistoricoDescricoes(prev => [...prev, descricaoEntrada]);
 
-    // Atualiza histórico de descrições
-    if (!historicoDescricoes.includes(descricaoEntrada)) {
-      setHistoricoDescricoes(prev => [...prev, descricaoEntrada]);
-    }
-
-    const ref = doc(db, "usuarios", uid);
-    await updateDoc(ref, {
+    await updateDoc(doc(db, "usuarios", uid), {
       saldo: novoSaldo,
-      entradas: arrayUnion(novaEntrada),
+      entradas: [...entradas, novaEntrada],
     });
 
-    // Resetar campos
     setValorEntrada(0);
     setDescricaoEntrada("");
     setDataEntrada("");
   };
 
-  // Marcar fatura como paga
-  const pagarFatura = async (cartaoIndex: number, faturaIndex: number) => {
+  // Marcar fatura/parcela como paga
+  const pagarFatura = async (contaIdx: number, compraIdx?: number, parcelaIdx?: number, faturaIdx?: number, usarSaldo = true) => {
     if (!uid) return;
 
-    const novosCartoes = [...cartoes];
-    const fatura = novosCartoes[cartaoIndex].faturas[faturaIndex];
-    if (fatura.pago) return;
+    const novasContas = [...contas];
+    let valorPagamento = 0;
 
-    fatura.pago = true;
-    const novoSaldo = saldo - (fatura.valor ?? 0);
+    const conta = novasContas[contaIdx];
 
-    setCartoes(novosCartoes);
+    if (conta.modo === "compra" && compraIdx !== undefined && parcelaIdx !== undefined) {
+      const parcela = conta.compras![compraIdx].parcelas[parcelaIdx];
+      if (parcela.pago) return;
+      parcela.pago = true;
+      valorPagamento = parcela.valor;
+    } else if (conta.modo === "fatura" && faturaIdx !== undefined) {
+      const fatura = conta.faturas![faturaIdx];
+      if (fatura.pago) return;
+      fatura.pago = true;
+      valorPagamento = fatura.valor;
+    }
+
+    let novoSaldo = saldo;
+    if (usarSaldo) novoSaldo -= valorPagamento;
+
+    setContas(novasContas);
     setSaldo(novoSaldo);
 
-    const ref = doc(db, "usuarios", uid);
-    await updateDoc(ref, {
-      parcelamentos: novosCartoes,
+    await updateDoc(doc(db, "usuarios", uid), {
+      contas: novasContas,
       saldo: novoSaldo,
     });
+  };
+
+  // Editar fatura/parcela
+  const editarFatura = async (contaIdx: number, compraIdx?: number, parcelaIdx?: number, faturaIdx?: number) => {
+    if (!uid) return;
+
+    const novasContas = [...contas];
+    let item: any;
+
+    if (novasContas[contaIdx].modo === "compra" && compraIdx !== undefined && parcelaIdx !== undefined) {
+      item = novasContas[contaIdx].compras![compraIdx].parcelas[parcelaIdx];
+    } else if (novasContas[contaIdx].modo === "fatura" && faturaIdx !== undefined) {
+      item = novasContas[contaIdx].faturas![faturaIdx];
+    }
+
+    if (!item) return;
+
+    const novoValor = parseFloat(prompt("Novo valor:", String(item.valor)) || String(item.valor));
+    const novoVencimento = prompt("Novo vencimento (YYYY-MM-DD):", item.vencimento) || item.vencimento;
+
+    item.valor = novoValor;
+    item.vencimento = novoVencimento;
+
+    setContas(novasContas);
+    await updateDoc(doc(db, "usuarios", uid), { contas: novasContas });
   };
 
   if (loading) return <p>Carregando...</p>;
@@ -152,63 +190,67 @@ export default function Dashboard() {
       <h1>Dashboard</h1>
       <h2>Saldo: R$ {saldo.toFixed(2)}</h2>
 
-      {/* Registrar entrada detalhada */}
+      {/* Entradas */}
       <div style={{ marginTop: "20px" }}>
         <h3>Registrar Entrada</h3>
-        <input
-          type="number"
-          value={valorEntrada}
-          onChange={(e) => setValorEntrada(parseFloat(e.target.value))}
-          placeholder="Valor"
-        />
-        <input
-          type="text"
-          list="descricoes"
-          value={descricaoEntrada}
-          onChange={(e) => setDescricaoEntrada(e.target.value)}
-          placeholder="Descrição (ex: Salário)"
-        />
-        <datalist id="descricoes">
-          {historicoDescricoes.map((d, idx) => (
-            <option key={idx} value={d} />
-          ))}
-        </datalist>
-        <input
-          type="date"
-          value={dataEntrada}
-          onChange={(e) => setDataEntrada(e.target.value)}
-        />
+        <input type="number" placeholder="Valor" value={valorEntrada} onChange={e => setValorEntrada(Number(e.target.value))} />
+        <input type="text" placeholder="Descrição" list="descricoes" value={descricaoEntrada} onChange={e => setDescricaoEntrada(e.target.value)} />
+        <datalist id="descricoes">{historicoDescricoes.map((d, idx) => <option key={idx} value={d} />)}</datalist>
+        <input type="date" value={dataEntrada} onChange={e => setDataEntrada(e.target.value)} />
         <button onClick={registrarEntrada}>Adicionar Entrada</button>
       </div>
 
-      {/* Cartões e faturas */}
+      {/* Contas */}
       <div style={{ marginTop: "20px" }}>
-        <h3>Cartões de Crédito</h3>
-        {cartoes.length > 0 ? (
-          cartoes.map((cartao, cIdx) => {
-            const ordenadas = [...cartao.faturas].sort(
-              (a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime()
-            );
-            const abertas = ordenadas.filter(f => !f.pago);
-            if (abertas.length === 0) return null;
+        <h3>Contas e Faturas</h3>
+        {contas.map((conta, cIdx) => (
+          <div key={cIdx} style={{ border: "1px solid #ccc", padding: "10px", marginBottom: "10px" }}>
+            <h4>{conta.nome}</h4>
 
-            return (
-              <div key={cIdx} style={{ border: "1px solid #ccc", margin: "10px", padding: "10px" }}>
-                <h4>{cartao.nome}</h4>
-                <ul>
-                  {abertas.map((f, fIdx) => (
-                    <li key={f.vencimento + f.valor}>
-                      Vencimento: {f.vencimento} — R$ {f.valor.toFixed(2)} — Pendente ❌{" "}
-                      <button onClick={() => pagarFatura(cIdx, fIdx)}>Marcar como paga</button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })
-        ) : (
-          <p>não há cartão cadastrado.</p>
-        )}
+            {/* Faturas */}
+            {conta.modo === "fatura" && conta.faturas && conta.faturas.length > 0 && (
+              <ul>
+                {conta.faturas.map((f, fIdx) => (
+                  <li key={f.vencimento + f.valor}>
+                    R$ {f.valor.toFixed(2)} - {f.vencimento} - {f.pago ? "Pago ✅" : "Pendente ❌"}{" "}
+                    {!f.pago && (
+                      <>
+                        <button onClick={() => pagarFatura(cIdx, undefined, undefined, fIdx, true)}>Pagar com saldo</button>
+                        <button onClick={() => pagarFatura(cIdx, undefined, undefined, fIdx, false)}>Marcar pago</button>
+                      </>
+                    )}
+                    <button onClick={() => editarFatura(cIdx, undefined, undefined, fIdx)}>Editar</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Compras */}
+            {conta.modo === "compra" && conta.compras && conta.compras.length > 0 && (
+              <ul>
+                {conta.compras.map((compra, compIdx) => (
+                  <li key={compra.nome}>
+                    <strong>{compra.nome}</strong>
+                    <ul>
+                      {compra.parcelas.map((p, parcIdx) => (
+                        <li key={parcIdx}>
+                          R$ {p.valor.toFixed(2)} - {p.vencimento} - {p.pago ? "Pago ✅" : "Pendente ❌"}{" "}
+                          {!p.pago && (
+                            <>
+                              <button onClick={() => pagarFatura(cIdx, compIdx, parcIdx, undefined, true)}>Pagar com saldo</button>
+                              <button onClick={() => pagarFatura(cIdx, compIdx, parcIdx, undefined, false)}>Marcar pago</button>
+                            </>
+                          )}
+                          <button onClick={() => editarFatura(cIdx, compIdx, parcIdx)}>Editar</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Entradas recentes */}
@@ -216,13 +258,11 @@ export default function Dashboard() {
         <h3>Entradas Recentes</h3>
         {entradas.length > 0 ? (
           <ul>
-            {entradas
-              .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-              .map((e, idx) => (
-                <li key={e.data + e.descricao + idx}>
-                  {e.data} — {e.descricao} — R$ {e.valor.toFixed(2)}
-                </li>
-              ))}
+            {entradas.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()).map((e, idx) => (
+              <li key={idx}>
+                {e.data} — {e.descricao} — R$ {e.valor.toFixed(2)}
+              </li>
+            ))}
           </ul>
         ) : (
           <p>Nenhuma entrada registrada ainda.</p>

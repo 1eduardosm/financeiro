@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
-import Parcelamentos from "./pages/Parcelamentos";
 import Dashboard from "./pages/Dashboard";
 
 export default function App() {
@@ -17,10 +16,6 @@ export default function App() {
       <Route
         path="/setup"
         element={isLoggedIn ? <Setup /> : <Navigate to="/login" />}
-      />
-      <Route
-        path="/parcelamentos"
-        element={isLoggedIn ? <Parcelamentos /> : <Navigate to="/login" />}
       />
       <Route
         path="/dashboard"
