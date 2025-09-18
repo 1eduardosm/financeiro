@@ -49,7 +49,7 @@ export default function Login() {
         const dados = snap.data();
         console.log("dado: ", dados)
         if (dados.jaFezSetup) {
-          navigate("/dashboard"); // já configurado → dashboard
+          navigate("/Dashboard"); // já configurado → Dashboard
         } else {
           navigate("/setup"); // não configurado ainda
         }

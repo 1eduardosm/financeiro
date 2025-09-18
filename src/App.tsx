@@ -18,14 +18,14 @@ export default function App() {
         element={isLoggedIn ? <Setup /> : <Navigate to="/login" />}
       />
       <Route
-        path="/dashboard"
+        path="/Dashboard"
         element={isLoggedIn ? <Dashboard /> : <Navigate to="/login" />}
       />
 
       {/* Redireciona qualquer rota desconhecida */}
       <Route
         path="*"
-        element={<Navigate to={isLoggedIn ? "/dashboard" : "/login"} />}
+        element={<Navigate to={"/login"} />}
       />
     </Routes>
   );
