@@ -133,8 +133,9 @@ export default function Setup() {
         doc(db, "usuarios", user.uid),
         {
           contas,
+          temAlgumParcelamento, // 👈 agora a variável está em uso
           dataInicio: new Date().toISOString(),
-          jaFezSetup: true, // 🔥 chave usada no login para redirecionar
+          jaFezSetup: true,
         },
         { merge: true }
       );
