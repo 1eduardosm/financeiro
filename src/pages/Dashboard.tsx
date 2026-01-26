@@ -1,552 +1,317 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-
-type Parcela = {
-  valor: number; // Valor pendente
-  vencimento?: string;
-  pago?: boolean;
-};
-
-type Compra = {
-  nome: string;
-  parcelas: Parcela[];
-};
-
-type Fatura = {
-  valor: number; // Valor pendente
-  vencimento: string;
-  pago?: boolean;
-};
-
-type Conta = {
-  id: string;
-  nome: string;
-  saldo: number;
-  temParcelamentos: boolean;
-  modo?: "compra" | "fatura";
-  compras?: Compra[];
-  faturas?: Fatura[];
-};
-
-type Entrada = {
-  valor: number;
-  descricao: string;
-  data: string;
-  contaId: string;
-};
-
-type PagamentoEmAberto = {
-  contaIdx: number;
-  itemValor: number; // Valor da dívida pendente
-  compraIdx?: number;
-  parcelaIdx?: number;
-  faturaIdx?: number;
-  contaId: string;
-};
-
-// Estrutura para cada fonte de pagamento parcial
-type FontePagamento = {
-  id: number;
-  valor: number;
-  tipo: 'saldo' | 'terceiros';
-  descricao?: string;
-  contaOrigemId?: string;
-};
+import { signOut } from "firebase/auth";
 
 export default function Dashboard() {
-  const [contas, setContas] = useState<Conta[]>([]);
-  const [entradas, setEntradas] = useState<Entrada[]>([]);
-  const [historicoDescricoes, setHistoricoDescricoes] = useState<string[]>([]);
+  const [contas, setContas] = useState<any[]>([]);
+  const [entradas, setEntradas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [contasExpandidas, setContasExpandidas] = useState<Record<string, boolean>>({});
 
-  // Estados do formulário de entrada
+  // Estados para Nova Conta
+  const [modalNovaConta, setModalNovaConta] = useState(false);
+  const [novoNomeConta, setNovoNomeConta] = useState("");
+  const [novoSaldoConta, setNovoSaldoConta] = useState(0);
+
+  // Estados dos formulários ORIGINAIS
   const [valorEntrada, setValorEntrada] = useState<number>(0);
   const [descricaoEntrada, setDescricaoEntrada] = useState<string>("");
-  const [dataEntrada, setDataEntrada] = useState<string>("");
   const [contaEntradaId, setContaEntradaId] = useState<string>("");
 
-  // ESTADO CHAVE PARA O NOVO RECURSO DE PAGAMENTO DIVIDIDO
-  const [pagamentoEmAberto, setPagamentoEmAberto] = useState<PagamentoEmAberto | null>(null);
+  const [valorSaida, setValorSaida] = useState<number>(0);
+  const [descricaoSaida, setDescricaoSaida] = useState<string>("");
+  const [contaSaidaId, setContaSaidaId] = useState<string>("");
 
-  // NOVO ESTADO CHAVE: Array de fontes de pagamento
-  const [fontesDePagamento, setFontesDePagamento] = useState<FontePagamento[]>([]);
+  const [compraNome, setCompraNome] = useState("");
+  const [compraValorTotal, setCompraValorTotal] = useState(0);
+  const [compraParcelas, setCompraParcelas] = useState(1);
+  const [compraJuros, setCompraJuros] = useState(0);
+  const [compraDataInicio, setCompraDataInicio] = useState(new Date().toISOString().slice(0, 7));
+  const [compraContaId, setCompraContaId] = useState("");
 
-  // Estados temporários para adicionar nova fonte
+  // Pagamento Parcial
+  const [pagamentoFatura, setPagamentoFatura] = useState<any>(null);
+  const [fontesDePagamento, setFontesDePagamento] = useState<any[]>([]);
   const [novoValor, setNovoValor] = useState<number>(0);
   const [novoTipo, setNovoTipo] = useState<'saldo' | 'terceiros'>('saldo');
-  const [novaDescricao, setNovaDescricao] = useState<string>('');
-  const [novaContaOrigemId, setNovaContaOrigemId] = useState<string>('');
+  const [novaDescricao, setNovaDescricao] = useState('');
+  const [novaContaOrigemId, setNovaContaOrigemId] = useState('');
+  const [verDetalhes, setVerDetalhes] = useState<any[] | null>(null);
 
   const uid = auth.currentUser?.uid;
   const dataAtual = new Date().toISOString().slice(0, 10);
 
-  // Variáveis calculadas no topo do componente para fácil acesso
-  const saldoTotalContas = contas.reduce((total, conta) => total + conta.saldo, 0);
-  const contaEmPagamento = pagamentoEmAberto ? contas[pagamentoEmAberto.contaIdx] : null;
-  const restanteDaDivida = pagamentoEmAberto ? pagamentoEmAberto.itemValor : 0;
-  const valorPagoNaSessao = fontesDePagamento.reduce((sum, f) => sum + f.valor, 0);
-  const valorMaxAdicionar = restanteDaDivida - valorPagoNaSessao;
-  const contasMap = new Map(contas.map(c => [c.id, c.nome]));
-
   useEffect(() => {
-    // ... (Lógica de Carregamento permanece igual)
     const carregar = async () => {
       if (!uid) return;
-
       try {
         const snap = await getDoc(doc(db, "usuarios", uid));
-        if (!snap.exists()) return;
-
-        const data = snap.data();
-
-        // Contas
-        const userContas: Conta[] = (data.contas ?? []).map((c: any) => ({
-          id: c.nome,
-          nome: c.nome,
-          saldo: c.saldo,
-          temParcelamentos: c.temParcelamentos,
-          modo: c.modo,
-          compras: c.compras?.map((comp: any) => ({
-            nome: comp.nome,
-            parcelas: comp.parcelas?.map((p: any) => ({
-              valor: Number(p.valor) ?? 0,
-              vencimento: p.vencimento ?? "",
-              pago: p.pago ?? false,
-            })) ?? [],
-          })) ?? [],
-          faturas: c.faturas?.map((f: any) => ({
-            valor: Number(f.valor) ?? 0,
-            vencimento: f.vencimento ?? "",
-            pago: f.pago ?? false,
-          })) ?? [],
-        }));
-        setContas(userContas);
-
-        if (userContas.length > 0) {
-          setContaEntradaId(userContas[0].id);
-          setNovaContaOrigemId(userContas[0].id); // Pre-seleciona a conta de origem
+        if (snap.exists()) {
+          const data = snap.data();
+          const userContas = (data.contas ?? []).map((c: any) => ({
+            ...c,
+            id: c.nome,
+            faturas: Array.isArray(c.faturas) ? c.faturas : []
+          }));
+          setContas(userContas);
+          setEntradas(data.entradas ?? []);
+          if (userContas.length > 0) {
+            setContaEntradaId(userContas[0].id);
+            setContaSaidaId(userContas[0].id);
+            setCompraContaId(userContas[0].id);
+            setNovaContaOrigemId(userContas[0].id);
+          }
         }
-
-        // Entradas
-        const entradasExistentes: Entrada[] = (data.entradas ?? []).map((e: any) => ({
-          valor: Number(e.valor) ?? 0,
-          descricao: e.descricao ?? "",
-          data: e.data ?? "",
-          contaId: e.contaId ?? "",
-        }));
-        setEntradas(entradasExistentes);
-
-        // Histórico de descrições
-        setHistoricoDescricoes(Array.from(new Set(entradasExistentes.map(e => e.descricao))));
-      } catch (err) {
-        console.error("Erro ao carregar:", err);
-      } finally {
-        setLoading(false);
-      }
+      } catch (e) { console.error(e); }
+      setLoading(false);
     };
-
     carregar();
   }, [uid]);
 
-  // Função para abrir o formulário de pagamento
-  const abrirFormularioPagamento = (contaIdx: number, itemValor: number, contaId: string, compraIdx?: number, parcelaIdx?: number, faturaIdx?: number) => {
-    // Se o valor pendente for zero, não abre o formulário
-    if (itemValor <= 0) {
-      return alert("Esta fatura/parcela já foi totalmente paga ou seu valor é zero.");
-    }
-
-    setPagamentoEmAberto({ contaIdx, itemValor, compraIdx, parcelaIdx, faturaIdx, contaId });
-    setFontesDePagamento([]);
-
-    // Valor inicial do campo Novo Pagamento deve ser o valor restante
-    setNovoValor(itemValor > 0 ? itemValor : 0);
-    setNovoTipo('saldo');
-    setNovaDescricao('');
-    setNovaContaOrigemId(contas.length > 0 ? contas[0].id : '');
-  };
-
-  // Função para fechar o formulário de pagamento
-  const fecharFormularioPagamento = () => {
-    setPagamentoEmAberto(null);
-    setFontesDePagamento([]);
-  };
-
-  // Registrar entrada (permanece igual)
-  const registrarEntrada = async () => {
-    if (!uid || valorEntrada <= 0 || !descricaoEntrada || !dataEntrada || !contaEntradaId) {
-      return alert("Preencha todos os campos corretamente e selecione a conta!");
-    }
-
-    const novaEntrada: Entrada = { valor: valorEntrada, descricao: descricaoEntrada, data: dataEntrada, contaId: contaEntradaId };
-
-    const novasContas = contas.map(conta => {
-      if (conta.id === contaEntradaId) {
-        return { ...conta, saldo: conta.saldo + valorEntrada };
-      }
-      return conta;
-    });
-    setContas(novasContas);
-
-    setEntradas(prev => [...prev, novaEntrada]);
-    if (!historicoDescricoes.includes(descricaoEntrada)) setHistoricoDescricoes(prev => [...prev, descricaoEntrada]);
-
-    await updateDoc(doc(db, "usuarios", uid), {
-      contas: novasContas.map(c => {
-        const { id, ...rest } = c;
-        return rest;
-      }),
-      entradas: [...entradas, novaEntrada],
-    });
-
-    setValorEntrada(0);
-    setDescricaoEntrada("");
-    setDataEntrada("");
-  };
-
-  // ADICIONAR NOVA FONTE DE PAGAMENTO
-  const adicionarFontePagamento = () => {
-    if (!pagamentoEmAberto) return;
-
-    if (novoValor <= 0) {
-      return alert("O valor do pagamento deve ser maior que zero.");
-    }
-
-    // Validação que usa a nova variável calculada
-    if (novoValor > valorMaxAdicionar && valorMaxAdicionar >= 0.01) {
-      return alert(`O valor (R$ ${novoValor.toFixed(2)}) excede o restante a pagar (R$ ${valorMaxAdicionar.toFixed(2)}). Ajuste o valor.`);
-    }
-
-    if (novoTipo === 'saldo' && !novaContaOrigemId) {
-      return alert("Selecione a conta de origem do saldo.");
-    }
-
-    if (novoTipo === 'terceiros' && !novaDescricao.trim()) {
-      return alert("A descrição é obrigatória para pagamento de terceiros/outras contas.");
-    }
-
-    const novaFonte: FontePagamento = {
-      id: Date.now(),
-      valor: novoValor,
-      tipo: novoTipo,
-      descricao: novaDescricao.trim() || undefined,
-      contaOrigemId: novoTipo === 'saldo' ? novaContaOrigemId : undefined
-    };
-
-    setFontesDePagamento(prev => [...prev, novaFonte]);
-
-    // Limpar e preparar para o próximo pagamento
-    const novoValorRestante = restanteDaDivida - (valorPagoNaSessao + novoValor);
-    setNovoValor(novoValorRestante > 0 ? novoValorRestante : 0);
-    setNovoTipo('saldo');
-    setNovaDescricao('');
-    setNovaContaOrigemId(contas.length > 0 ? contas[0].id : '');
-  };
-
-  // Lógica principal de pagamento (Executada ao clicar em "Confirmar Pagamento")
-  const processarPagamento = async () => {
-    if (!pagamentoEmAberto || !uid || fontesDePagamento.length === 0) {
-      return alert("Nenhuma fonte de pagamento adicionada.");
-    }
-
-    // 1. VALIDAÇÕES FINAIS (O total pago não pode exceder o valor total da dívida)
-    if (valorPagoNaSessao > pagamentoEmAberto.itemValor) {
-      return alert(`O total pago (R$ ${valorPagoNaSessao.toFixed(2)}) não pode exceder o valor pendente (R$ ${pagamentoEmAberto.itemValor.toFixed(2)}).`);
-    }
-
-    const { contaIdx, compraIdx, parcelaIdx, faturaIdx, contaId } = pagamentoEmAberto;
-    const novasContas = [...contas];
-
-    // 2. Pré-validação de Saldo
-    const saldosNecessarios: { [key: string]: number } = {};
-    fontesDePagamento.filter(f => f.tipo === 'saldo').forEach(f => {
-      saldosNecessarios[f.contaOrigemId!] = (saldosNecessarios[f.contaOrigemId!] || 0) + f.valor;
-    });
-
-    for (const id in saldosNecessarios) {
-      const contaOrigem = novasContas.find(c => c.id === id);
-      if (contaOrigem && saldosNecessarios[id] > contaOrigem.saldo) {
-        return alert(`Saldo insuficiente na conta de origem ${contaOrigem.nome}. Saldo atual: R$ ${contaOrigem.saldo.toFixed(2)}. Necessário: R$ ${saldosNecessarios[id].toFixed(2)}.`);
-      }
-    }
-
-    // 3. Obter Descrição do Item
-    let itemDescricao = '';
-    let item: Fatura | Parcela | undefined;
-
-    if (novasContas[contaIdx].modo === "compra" && compraIdx !== undefined && parcelaIdx !== undefined) {
-      item = novasContas[contaIdx].compras![compraIdx].parcelas[parcelaIdx];
-      itemDescricao = `Pgto Parcela (Conta: ${novasContas[contaIdx].nome}, Compra: ${novasContas[contaIdx].compras![compraIdx].nome})`;
-    } else if (novasContas[contaIdx].modo === "fatura" && faturaIdx !== undefined) {
-      item = novasContas[contaIdx].faturas![faturaIdx];
-      itemDescricao = `Pgto Fatura ${novasContas[contaIdx].nome}`;
-    }
-
-    if (!item) return;
-
-    // 4. ATUALIZAÇÃO CHAVE: Reduzir o valor pendente do item
-    item.valor -= valorPagoNaSessao;
-
-    // 5. Marcar como pago se o valor restante for zero ou negativo
-    if (item.valor <= 0) {
-      item.pago = true;
-      item.valor = 0; // Garante que o valor pendente não seja negativo
-    }
-
-
-    // 6. Processar Pagamentos e Registrar Entradas (Saídas)
-    const novasEntradas: Entrada[] = [];
-
-    // Atualiza saldo e registra saída para pagamentos com Saldo da Conta
-    novasContas.forEach(conta => {
-      const valorSaida = saldosNecessarios[conta.id] || 0;
-
-      if (valorSaida > 0) {
-        conta.saldo -= valorSaida;
-
-        novasEntradas.push({
-          valor: -valorSaida,
-          descricao: `${itemDescricao} (via Saldo da Conta ${conta.nome})`,
-          data: dataAtual,
-          contaId: conta.id
-        });
-      }
-    });
-
-    // Registra saídas para Terceiros/Outras Contas (sem alterar saldos de conta)
-    fontesDePagamento.filter(f => f.tipo === 'terceiros').forEach(f => {
-      novasEntradas.push({
-        valor: -f.valor,
-        descricao: `${itemDescricao} (${f.descricao})`,
-        data: dataAtual,
-        contaId: contaId // Registra na conta que está sendo paga (para rastreamento)
-      });
-    });
-
-    // 7. Atualizar Estados Locais
-    setContas(novasContas);
-    setEntradas(prev => [...prev, ...novasEntradas]);
-    fecharFormularioPagamento();
-
-    // 8. Atualizar Firebase
-    await updateDoc(doc(db, "usuarios", uid), {
-      contas: novasContas.map(c => {
-        const { id, ...rest } = c;
-        return rest;
-      }),
-      entradas: [...entradas, ...novasEntradas],
-    });
-  };
-
-  // ... (editarFatura permanece igual)
-
-  const editarFatura = async (contaIdx: number, compraIdx?: number, parcelaIdx?: number, faturaIdx?: number) => {
+  const atualizarFirebase = async (nContas: any[], nEntradas: any[]) => {
     if (!uid) return;
-
-    const novasContas = [...contas];
-    let item: any;
-
-    if (novasContas[contaIdx].modo === "compra" && compraIdx !== undefined && parcelaIdx !== undefined) {
-      item = novasContas[contaIdx].compras![compraIdx].parcelas[parcelaIdx];
-    } else if (novasContas[contaIdx].modo === "fatura" && faturaIdx !== undefined) {
-      item = novasContas[contaIdx].faturas![faturaIdx];
-    }
-
-    if (!item) return;
-
-    const novoValor = parseFloat(prompt("Novo valor:", String(item.valor)) || String(item.valor));
-    const novoVencimento = prompt("Novo vencimento (YYYY-MM-DD):", item.vencimento) || item.vencimento;
-
-    item.valor = novoValor;
-    item.vencimento = novoVencimento;
-
-    setContas(novasContas);
-    await updateDoc(doc(db, "usuarios", uid), {
-      contas: novasContas.map(c => {
-        const { id, ...rest } = c;
-        return rest;
-      })
-    });
+    const save = nContas.map(({ id, ...rest }) => rest);
+    await updateDoc(doc(db, "usuarios", uid), { contas: save, entradas: nEntradas });
   };
 
-  if (loading) return <p>Carregando...</p>;
+  const adicionarNovaConta = async () => {
+    if (!novoNomeConta) return alert("Informe o nome da conta");
+    const novaConta = { nome: novoNomeConta, id: novoNomeConta, saldo: novoSaldoConta, faturas: [] };
+    const nContas = [...contas, novaConta];
+    setContas(nContas);
+    await atualizarFirebase(nContas, entradas);
+    setModalNovaConta(false);
+    setNovoNomeConta("");
+    setNovoSaldoConta(0);
+  };
+
+  const registrarEntrada = async () => {
+    if (!uid || valorEntrada <= 0) return;
+    const nContas = contas.map(c => c.id === contaEntradaId ? { ...c, saldo: (c.saldo || 0) + valorEntrada } : c);
+    const nEntradas = [...entradas, { valor: valorEntrada, descricao: descricaoEntrada, data: dataAtual, contaId: contaEntradaId }];
+    setContas(nContas); setEntradas(nEntradas);
+    await atualizarFirebase(nContas, nEntradas);
+    setValorEntrada(0); setDescricaoEntrada("");
+  };
+
+  const registrarSaida = async () => {
+    if (!uid || valorSaida <= 0) return;
+    const nContas = contas.map(c => c.id === contaSaidaId ? { ...c, saldo: (c.saldo || 0) - valorSaida } : c);
+    const nEntradas = [...entradas, { valor: -valorSaida, descricao: descricaoSaida, data: dataAtual, contaId: contaSaidaId }];
+    setContas(nContas); setEntradas(nEntradas);
+    await atualizarFirebase(nContas, nEntradas);
+    setValorSaida(0); setDescricaoSaida("");
+  };
+
+  const registrarCompraParcelada = async () => {
+    if (!uid || compraValorTotal <= 0) return;
+    const nContas = [...contas];
+    const conta = nContas.find(c => c.id === compraContaId);
+    if (!conta) return;
+    const vParc = (compraValorTotal / (compraParcelas || 1)) * (1 + (compraJuros || 0) / 100);
+    for (let i = 0; i < (compraParcelas || 1); i++) {
+      const d = new Date(compraDataInicio + "-05");
+      d.setMonth(d.getMonth() + i);
+      const mY = d.toISOString().slice(0, 7);
+      let fat = conta.faturas.find((f: any) => f.mesAno === mY);
+      const item = { nome: compraNome, valorOriginal: vParc, parcelaAtual: i + 1, totalParcelas: compraParcelas };
+      if (fat) {
+        fat.itens.push(item);
+        fat.valorTotal = (fat.valorTotal || 0) + vParc;
+      } else {
+        conta.faturas.push({ mesAno: mY, valorTotal: vParc, pago: false, itens: [item], detalhesPagamento: [] });
+      }
+    }
+    setContas(nContas); await atualizarFirebase(nContas, entradas);
+    setCompraNome(""); setCompraValorTotal(0);
+  };
+
+  const processarPagamento = async () => {
+    if (!pagamentoFatura) return;
+    const { cIdx, fIdx } = pagamentoFatura;
+    const nContas = [...contas];
+    const fat = nContas[cIdx].faturas[fIdx];
+    const totalSessao = fontesDePagamento.reduce((acc, f) => acc + (f.valor || 0), 0);
+    fat.valorTotal = (fat.valorTotal || 0) - totalSessao;
+    fat.detalhesPagamento = [...(fat.detalhesPagamento || []), ...fontesDePagamento];
+    if (fat.valorTotal <= 0.01) { fat.pago = true; fat.valorTotal = 0; }
+    const nEntradas = [...entradas];
+    fontesDePagamento.forEach(f => {
+      if (f.tipo === 'saldo') {
+        const cOrigem = nContas.find(c => c.id === f.contaOrigemId);
+        if (cOrigem) cOrigem.saldo = (cOrigem.saldo || 0) - f.valor;
+      }
+      nEntradas.push({ valor: -f.valor, descricao: f.tipo === 'terceiros' ? `Pgto Terceiro: ${f.descricao}` : `Abatimento Fat: ${fat.mesAno}`, data: dataAtual, contaId: f.contaOrigemId || nContas[cIdx].id });
+    });
+    setContas(nContas); setEntradas(nEntradas);
+    setPagamentoFatura(null); setFontesDePagamento([]);
+    await atualizarFirebase(nContas, nEntradas);
+  };
+
+  if (loading) return <div style={{padding:20}}>Carregando...</div>;
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h1>Dashboard</h1>
+    <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto" }}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems: 'center', borderBottom:'2px solid #860204', marginBottom:20, paddingBottom: 10}}>
+        <h2 style={{margin: 0}}>Financeiro</h2>
+        <button onClick={() => signOut(auth)} style={styles.btnLogout} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#6e0204')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#860204')}>
+          <span style={{marginRight: '8px'}}>✕</span> Sair
+        </button>
+      </div>
 
-      <h2>Saldo Total em Contas: R$ {saldoTotalContas.toFixed(2)}</h2>
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:10}}>
+        <div style={{background:'#fff', padding:12, borderRadius:8, boxShadow:'0 2px 4px rgba(0,0,0,0.1)', borderLeft:'5px solid #28a745'}}>
+          <h4>(+) Entrada</h4>
+          <input type="number" placeholder="R$" value={valorEntrada || ""} onChange={e => setValorEntrada(Number(e.target.value))} style={styles.input} />
+          <input type="text" placeholder="Descrição" value={descricaoEntrada} onChange={e => setDescricaoEntrada(e.target.value)} style={styles.input} />
+          <select value={contaEntradaId} onChange={e => setContaEntradaId(e.target.value)} style={styles.input}>
+            {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+          <button onClick={registrarEntrada} style={{...styles.btn, backgroundColor:'#28a745', color:'white'}}>Confirmar</button>
+        </div>
 
-      {/* Formulário de Pagamento Condicional */}
-      {pagamentoEmAberto && contaEmPagamento && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', width: '500px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <h3>Pagar Item: R$ {restanteDaDivida.toFixed(2)} (Pendente)</h3>
-            <p>Conta Principal: <strong>{contaEmPagamento.nome}</strong></p>
-            <p style={{ fontWeight: 'bold', color: 'blue' }}>
-              Valor pago nesta sessão: R$ {valorPagoNaSessao.toFixed(2)}
-            </p>
-            <hr />
+        <div style={{background:'#fff', padding:12, borderRadius:8, boxShadow:'0 2px 4px rgba(0,0,0,0.1)', borderLeft:'5px solid #dc3545'}}>
+          <h4>(-) Saída</h4>
+          <input type="number" placeholder="R$" value={valorSaida || ""} onChange={e => setValorSaida(Number(e.target.value))} style={styles.input} />
+          <input type="text" placeholder="Descrição" value={descricaoSaida} onChange={e => setDescricaoSaida(e.target.value)} style={styles.input} />
+          <select value={contaSaidaId} onChange={e => setContaSaidaId(e.target.value)} style={styles.input}>
+            {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+          <button onClick={registrarSaida} style={{...styles.btn, backgroundColor:'#dc3545', color:'white'}}>Confirmar</button>
+        </div>
 
-            {/* LISTA DE FONTES DE PAGAMENTO JÁ ADICIONADAS */}
-            {fontesDePagamento.map(f => (
-              <div key={f.id} style={{ border: '1px solid #eee', padding: '8px', margin: '5px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>
-                  R$ **{f.valor.toFixed(2)}** |
-                  {f.tipo === 'saldo' ? ` Saldo: ${contasMap.get(f.contaOrigemId!)}` : ` Outros: ${f.descricao}`}
-                </span>
-                <button onClick={() => setFontesDePagamento(fontesDePagamento.filter(item => item.id !== f.id))} style={{ backgroundColor: 'red', color: 'white', border: 'none', padding: '5px', cursor: 'pointer' }}>X</button>
-              </div>
-            ))}
+        <div style={{background:'#fff', padding:12, borderRadius:8, boxShadow:'0 2px 4px rgba(0,0,0,0.1)', borderLeft:'5px solid #007bff'}}>
+          <h4>(+) Compra Parcelada</h4>
+          <input type="text" placeholder="Item" value={compraNome} onChange={e => setCompraNome(e.target.value)} style={styles.input} />
+          <input type="number" placeholder="Total R$" value={compraValorTotal || ""} onChange={e => setCompraValorTotal(Number(e.target.value))} style={styles.input} />
+          <div style={{display:'flex', gap:5}}>
+            <input type="number" placeholder="Parc." value={compraParcelas || ""} onChange={e => setCompraParcelas(Number(e.target.value))} style={styles.input} />
+            <input type="number" placeholder="Juros %" value={compraJuros || ""} onChange={e => setCompraJuros(Number(e.target.value))} style={styles.input} />
+          </div>
+          <input type="month" value={compraDataInicio} onChange={e => setCompraDataInicio(e.target.value)} style={styles.input} />
+          <select value={compraContaId} onChange={e => setCompraContaId(e.target.value)} style={styles.input}>
+            {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+          <button onClick={registrarCompraParcelada} style={{...styles.btn, backgroundColor:'#007bff', color:'white'}}>Lançar</button>
+        </div>
+      </div>
 
-            <h4 style={{ marginTop: '20px' }}>Adicionar Forma de Pagamento</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
-
-              <select value={novoTipo} onChange={e => setNovoTipo(e.target.value as 'saldo' | 'terceiros')} style={{ padding: '8px' }}>
-                <option value="saldo">Pagar com Saldo de Conta</option>
-                <option value="terceiros">Pagar com Terceiros/Outras Fontes</option>
-              </select>
-
-              <input
-                type="number"
-                placeholder={`Valor (Max R$ ${valorMaxAdicionar.toFixed(2)})`}
-                value={novoValor}
-                onChange={e => setNovoValor(Number(e.target.value))}
-                max={valorMaxAdicionar}
-                style={{ padding: '8px' }}
-              />
-            </div>
-
-            {novoTipo === 'saldo' && (
-              <select value={novaContaOrigemId} onChange={e => setNovaContaOrigemId(e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '15px' }}>
-                {contas.map(conta => (
-                  <option key={conta.id} value={conta.id}>
-                    {conta.nome} (Saldo: R$ {conta.saldo.toFixed(2)})
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {novoTipo === 'terceiros' && (
-              <input
-                type="text"
-                placeholder="Descrição (Ex: Pagamento Pai, Conta Investimento)"
-                value={novaDescricao}
-                onChange={e => setNovaDescricao(e.target.value)}
-                style={{ width: '100%', padding: '8px', marginBottom: '15px' }}
-              />
-            )}
-
-            <button
-              onClick={adicionarFontePagamento}
-              disabled={novoValor <= 0 || valorPagoNaSessao >= restanteDaDivida}
-              style={{ width: '100%', padding: '10px', backgroundColor: valorPagoNaSessao < restanteDaDivida ? '#007bff' : 'gray', color: 'white', border: 'none', cursor: 'pointer', marginBottom: '15px' }}
-            >
-              Adicionar Pagamento
-            </button>
-
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-              <button
-                onClick={processarPagamento}
-                disabled={valorPagoNaSessao <= 0}
-                style={{ padding: '10px 15px', backgroundColor: valorPagoNaSessao > 0 ? 'green' : 'gray', color: 'white', border: 'none', cursor: 'pointer' }}
-              >
-                Confirmar Pagamento de R$ {valorPagoNaSessao.toFixed(2)}
-              </button>
-              <button onClick={fecharFormularioPagamento} style={{ padding: '10px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer' }}>
-                Cancelar
-              </button>
-            </div>
+      {/* MODAL NOVA CONTA */}
+      {modalNovaConta && (
+        <div style={styles.overlay}>
+          <div style={styles.modal}>
+            <h3>Adicionar Nova Conta</h3>
+            <input type="text" placeholder="Nome da Conta" value={novoNomeConta} onChange={e => setNovoNomeConta(e.target.value)} style={styles.input} />
+            <input type="number" placeholder="Saldo Inicial" value={novoSaldoConta || ""} onChange={e => setNovoSaldoConta(Number(e.target.value))} style={styles.input} />
+            <button onClick={adicionarNovaConta} style={{...styles.btn, backgroundColor:'#28a745', color:'white', marginBottom: 5}}>Criar Conta</button>
+            <button onClick={() => setModalNovaConta(false)} style={{...styles.btn, backgroundColor:'#666', color:'white'}}>Cancelar</button>
           </div>
         </div>
       )}
 
-      {/* ... (Restante do Dashboard.tsx) */}
-
-      <div style={{ marginTop: "20px" }}>
-        <h3>Registrar Entrada</h3>
-        <input type="number" placeholder="Valor" value={valorEntrada} onChange={e => setValorEntrada(Number(e.target.value))} />
-        <input type="text" placeholder="Descrição" list="descricoes" value={descricaoEntrada} onChange={e => setDescricaoEntrada(e.target.value)} />
-        <datalist id="descricoes">{historicoDescricoes.map((d, idx) => <option key={idx} value={d} />)}</datalist>
-        <input type="date" value={dataEntrada} onChange={e => setDataEntrada(e.target.value)} />
-
-        <select value={contaEntradaId} onChange={e => setContaEntradaId(e.target.value)}>
-          <option value="" disabled>Selecione a Conta</option>
-          {contas.map(conta => (
-            <option key={conta.id} value={conta.id}>
-              {conta.nome}
-            </option>
-          ))}
-        </select>
-
-        <button onClick={registrarEntrada} disabled={contas.length === 0}>Adicionar Entrada</button>
-        {contas.length === 0 && <p style={{ color: 'red' }}>Crie uma conta para registrar entradas.</p>}
-      </div>
-
-      {/* Contas e Faturas */}
-      <div style={{ marginTop: "20px" }}>
-        <h3>Contas e Faturas</h3>
-        {contas.map((conta, cIdx) => (
-          <div key={cIdx} style={{ border: "1px solid #ccc", padding: "10px", marginBottom: "20px" }}>
-            <h4>{conta.nome} — Saldo: R$ {conta.saldo.toFixed(2)}</h4>
-
-            {/* Entradas desta Conta */}
-            <div style={{ marginTop: "15px", marginBottom: "15px", padding: "10px", border: "1px dashed #ddd" }}>
-              <h5>Entradas/Saídas Recentes nesta Conta</h5>
-              {entradas
-                .filter(e => e.contaId === conta.id)
-                .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-                .slice(0, 5)
-                .map((e, idx) => (
-                  <p key={idx} style={{ margin: "5px 0", fontSize: "0.9em", color: e.valor < 0 ? 'red' : 'green' }}>
-                    {e.data} — **{e.descricao}** — R$ {e.valor.toFixed(2)}
-                  </p>
-                ))}
-              {entradas.filter(e => e.contaId === conta.id).length === 0 && (
-                <p style={{ fontSize: "0.9em", color: "#666" }}>Nenhuma entrada/saída nesta conta.</p>
-              )}
-            </div>
-
-            {/* Faturas */}
-            {conta.modo === "fatura" && conta.faturas && conta.faturas.length > 0 && (
-              <ul>
-                {conta.faturas.map((f, fIdx) => (
-                  <li key={f.vencimento + f.valor}>
-                    R$ {f.valor.toFixed(2)} {f.valor > 0 ? 'pendente' : ''} - {f.vencimento} - {f.pago ? "Pago ✅" : "Pendente ❌"}{" "}
-                    {!f.pago && (
-                      <button onClick={() => abrirFormularioPagamento(cIdx, f.valor, conta.id, undefined, undefined, fIdx)}>Marcar como Paga</button>
-                    )}
-                    <button onClick={() => editarFatura(cIdx, undefined, undefined, fIdx)}>Editar</button>
-                  </li>
-                ))}
-              </ul>
+      {/* MODAL PAGAMENTO */}
+      {pagamentoFatura && (
+        <div style={styles.overlay}>
+          <div style={styles.modal}>
+            <h3>Abater Fat. {contas[pagamentoFatura.cIdx].faturas[pagamentoFatura.fIdx].mesAno}</h3>
+            <p>Saldo Restante: R$ {(contas[pagamentoFatura.cIdx].faturas[pagamentoFatura.fIdx].valorTotal || 0).toFixed(2)}</p>
+            <input type="number" placeholder="Valor R$" value={novoValor || ""} onChange={e => setNovoValor(Number(e.target.value))} style={styles.input} />
+            <select value={novoTipo} onChange={e => setNovoTipo(e.target.value as any)} style={styles.input}>
+              <option value="saldo">Meu Saldo</option>
+              <option value="terceiros">Terceiros</option>
+            </select>
+            {novoTipo === 'saldo' ? (
+              <select value={novaContaOrigemId} onChange={e => setNovaContaOrigemId(e.target.value)} style={styles.input}>
+                {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            ) : (
+              <input type="text" placeholder="Quem pagou? / Descrição" value={novaDescricao} onChange={e => setNovaDescricao(e.target.value)} style={styles.input} />
             )}
+            <button onClick={() => {
+              if(novoValor > 0) setFontesDePagamento([...fontesDePagamento, {id: Date.now(), valor: novoValor, tipo: novoTipo, contaOrigemId: novaContaOrigemId, descricao: novaDescricao}]);
+              setNovoValor(0); setNovaDescricao('');
+            }} style={{...styles.btn, backgroundColor:'#007bff', color:'white'}}>+ Adicionar</button>
+            <div style={{margin:'10px 0', borderTop:'1px solid #eee', paddingTop:5}}>
+              {fontesDePagamento.map((f, idx) => (
+                <div key={f.id} style={{display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:3}}>
+                  <span>R$ {f.valor.toFixed(2)} ({f.tipo === 'terceiros' ? f.descricao : 'Saldo'})</span>
+                  <button onClick={() => setFontesDePagamento(fontesDePagamento.filter((_, i) => i !== idx))} style={{color:'red', border:'none', background:'none', cursor:'pointer'}}>remover</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={processarPagamento} style={{...styles.btn, backgroundColor:'green', color:'white'}}>Confirmar Abatimento</button>
+            <button onClick={() => {setPagamentoFatura(null); setFontesDePagamento([]); setNovaDescricao('');}} style={{...styles.btn, backgroundColor:'#666', color:'white', marginTop:5}}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
-            {/* Compras */}
-            {conta.modo === "compra" && conta.compras && conta.compras.length > 0 && (
-              <ul>
-                {conta.compras.map((compra, compIdx) => (
-                  <li key={compra.nome}>
-                    <strong>{compra.nome}</strong>
-                    <ul>
-                      {compra.parcelas.map((p, parcIdx) => (
-                        <li key={parcIdx}>
-                          R$ {p.valor.toFixed(2)} {p.valor > 0 ? 'pendente' : ''} - {p.vencimento} - {p.pago ? "Pago ✅" : "Pendente ❌"}{" "}
-                          {!p.pago && (
-                            <button onClick={() => abrirFormularioPagamento(cIdx, p.valor, conta.id, compIdx, parcIdx, undefined)}>Marcar como Paga</button>
-                          )}
-                          <button onClick={() => editarFatura(cIdx, compIdx, parcIdx)}>Editar</button>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
+      {/* LISTA DE CONTAS */}
+      <div style={{marginTop:30}}>
+        {contas.map((conta, cIdx) => (
+          <div key={conta.id} style={{border:'1px solid #ddd', borderRadius:8, padding:12, marginBottom:10, background:'#fdfdfd'}}>
+            <h3 onClick={() => setContasExpandidas({...contasExpandidas, [conta.id]: !contasExpandidas[conta.id]})} style={{cursor:'pointer', margin:0}}>
+              {contasExpandidas[conta.id] ? "▼" : "▶"} {conta.nome} — R$ {(conta.saldo || 0).toFixed(2)}
+            </h3>
+            {contasExpandidas[conta.id] && (
+              <div style={{marginTop:15}}>
+                {(!conta.faturas || conta.faturas.length === 0) ? (
+                  <p style={{fontSize: 13, color: '#999', textAlign: 'center', padding: '10px 0'}}>Sem faturas por aqui</p>
+                ) : (
+                  conta.faturas.sort((a:any, b:any) => (a.mesAno || "").localeCompare(b.mesAno || ""))
+                    .map((f:any, fIdx:number) => (
+                    <div key={f.mesAno} style={{padding:'8px 0', borderBottom:'1px solid #f0f0f0'}}>
+                      <div style={{display:'flex', justifyContent:'space-between'}}>
+                        <strong>{f.mesAno}</strong>
+                        <span style={{color: f.pago ? 'green' : 'red'}}>{f.pago ? "PAGA" : `R$ ${(f.valorTotal || 0).toFixed(2)}`}</span>
+                      </div>
+                      <div style={{fontSize:11, color:'#666'}}>
+                        {(f.itens || []).map((it:any, i:number) => <div key={i}>• {it.nome} ({it.parcelaAtual}/{it.totalParcelas})</div>)}
+                      </div>
+                      <div style={{display:'flex', gap:10, marginTop:5}}>
+                        {!f.pago && <button onClick={() => setPagamentoFatura({cIdx, fIdx})} style={styles.btnSmall}>Abater</button>}
+                        <button onClick={() => setVerDetalhes(f.detalhesPagamento)} style={{...styles.btnSmall, backgroundColor:'#eee'}}>Ver Histórico</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             )}
           </div>
         ))}
+        
+        {/* BOTÃO ADICIONAR CONTA */}
+        <button 
+          onClick={() => setModalNovaConta(true)} 
+          style={{...styles.btn, backgroundColor: '#eee', color: '#333', border: '1px dashed #ccc', marginTop: 10}}
+        >
+          + Adicionar Outra Conta
+        </button>
       </div>
+
+      {/* MODAL HISTÓRICO */}
+      {verDetalhes && (
+        <div style={styles.overlay} onClick={() => setVerDetalhes(null)}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <h3>Extrato da Fatura</h3>
+            {(verDetalhes || []).map((det, i) => (
+              <div key={i} style={{fontSize:12, padding:5, borderBottom:'1px solid #eee'}}>
+                R$ {(det.valor || 0).toFixed(2)} - {det.tipo === 'terceiros' ? `Terceiro (${det.descricao})` : 'Saldo Próprio'}
+              </div>
+            ))}
+            <button onClick={() => setVerDetalhes(null)} style={{...styles.btn, backgroundColor:'#333', color:'white', marginTop:10}}>Fechar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const styles: any = {
+  input: { width: '100%', padding: 6, marginBottom: 6, boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: 4 },
+  btn: { width: '100%', padding: 8, border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' },
+  btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', fontSize: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' },
+  btnSmall: { padding: '3px 8px', fontSize: 11, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4 },
+  overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+  modal: { background: 'white', padding: 20, borderRadius: 10, width: 300 }
+};

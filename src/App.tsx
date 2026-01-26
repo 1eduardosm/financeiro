@@ -1,32 +1,43 @@
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase"; 
+
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
 import Dashboard from "./pages/Dashboard";
 
 export default function App() {
-  // Aqui você verifica se o usuário está logado (ex: localStorage ou estado global)
-  const isLoggedIn = !!localStorage.getItem("userToken"); 
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    // Monitora o estado de login em tempo real
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) return <div style={{ padding: "20px" }}>Carregando...</div>;
 
   return (
     <Routes>
-      {/* Rota de login sempre acessível */}
-      <Route path="/login" element={<Login />} />
-
-      {/* Rotas protegidas: só acessíveis se estiver logado */}
+      <Route 
+        path="/login" 
+        element={user ? <Navigate to="/Dashboard" /> : <Login />} 
+      />
       <Route
         path="/setup"
-        element={isLoggedIn ? <Setup /> : <Navigate to="/login" />}
+        element={user ? <Setup /> : <Navigate to="/login" />}
       />
       <Route
         path="/Dashboard"
-        element={isLoggedIn ? <Dashboard /> : <Navigate to="/login" />}
+        element={user ? <Dashboard /> : <Navigate to="/login" />}
       />
-
-      {/* Redireciona qualquer rota desconhecida */}
-      <Route
-        path="*"
-        element={<Navigate to={"/login"} />}
-      />
+      <Route path="/" element={<Navigate to={user ? "/Dashboard" : "/login"} />} />
+      <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }

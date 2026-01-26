@@ -5,7 +5,7 @@ import { doc, setDoc } from "firebase/firestore";
 
 interface Parcela {
   valor: number;
-  vencimento?: string; // opcional
+  vencimento: string;
 }
 
 interface Compra {
@@ -13,7 +13,7 @@ interface Compra {
   parcelas: Parcela[];
 }
 
-interface Fatura {
+interface FaturaSimples {
   valor: number;
   vencimento: string;
 }
@@ -22,9 +22,9 @@ interface Conta {
   nome: string;
   saldo: number;
   temParcelamentos: boolean;
-  modo?: "compra" | "fatura"; // definido apenas se temParcelamentos = true
+  modo?: "compra" | "fatura";
   compras?: Compra[];
-  faturas?: Fatura[];
+  faturas?: FaturaSimples[];
 }
 
 export default function Setup() {
@@ -33,25 +33,20 @@ export default function Setup() {
   const [contas, setContas] = useState<Conta[]>([]);
   const [contaAtualIndex, setContaAtualIndex] = useState<number | null>(null);
 
-  // Campos para criar nova conta
   const [novaContaNome, setNovaContaNome] = useState("");
   const [novoSaldo, setNovoSaldo] = useState<number>(0);
   const [novoTemParcelamentos, setNovoTemParcelamentos] = useState(false);
 
-  // Campos para compras
   const [novaCompraNome, setNovaCompraNome] = useState("");
   const [novoValorParcela, setNovoValorParcela] = useState<number>(0);
   const [novaDataParcela, setNovaDataParcela] = useState<string>("");
   const [parcelasCompra, setParcelasCompra] = useState<Parcela[]>([]);
 
-  // Campos para faturas
   const [novoValorFatura, setNovoValorFatura] = useState<number>(0);
   const [novaDataFatura, setNovaDataFatura] = useState<string>("");
 
   const adicionarConta = () => {
-    if (!novaContaNome || novoSaldo === undefined) {
-      return alert("Preencha o nome e saldo da conta.");
-    }
+    if (!novaContaNome) return alert("Preencha o nome da conta.");
     const novaConta: Conta = {
       nome: novaContaNome,
       saldo: novoSaldo,
@@ -59,17 +54,13 @@ export default function Setup() {
       compras: [],
       faturas: [],
     };
-    setContas([...contas, novaConta]);
-    setContaAtualIndex(contas.length);
+    const novasContas = [...contas, novaConta];
+    setContas(novasContas);
+    setContaAtualIndex(novasContas.length - 1);
 
-    // reset campos
     setNovaContaNome("");
     setNovoSaldo(0);
     setNovoTemParcelamentos(false);
-    setParcelasCompra([]);
-    setNovaCompraNome("");
-    setNovoValorFatura(0);
-    setNovaDataFatura("");
   };
 
   const selecionarModo = (modo: "compra" | "fatura") => {
@@ -79,241 +70,169 @@ export default function Setup() {
     setContas(novasContas);
   };
 
-  // Funções compras
   const adicionarParcela = () => {
-    if (!novoValorParcela || !novaDataParcela) {
-      return alert("Preencha valor e data da parcela.");
-    }
+    if (!novoValorParcela || !novaDataParcela) return alert("Preencha valor e data.");
     setParcelasCompra([...parcelasCompra, { valor: novoValorParcela, vencimento: novaDataParcela }]);
     setNovoValorParcela(0);
     setNovaDataParcela("");
   };
 
   const salvarCompra = () => {
-    if (!novaCompraNome || parcelasCompra.length === 0) {
-      return alert("Preencha nome e parcelas da compra.");
-    }
+    if (!novaCompraNome || parcelasCompra.length === 0) return alert("Dados incompletos.");
     if (contaAtualIndex === null) return;
     const novasContas = [...contas];
-    const compra: Compra = { nome: novaCompraNome, parcelas: parcelasCompra };
-    novasContas[contaAtualIndex].compras!.push(compra);
+    novasContas[contaAtualIndex].compras!.push({ nome: novaCompraNome, parcelas: parcelasCompra });
     setContas(novasContas);
-
-    // reset campos
     setNovaCompraNome("");
     setParcelasCompra([]);
   };
 
-  // Funções faturas
   const adicionarFatura = () => {
-    if (!novoValorFatura || !novaDataFatura) {
-      return alert("Preencha valor e data da fatura.");
-    }
+    if (!novoValorFatura || !novaDataFatura) return alert("Dados incompletos.");
     if (contaAtualIndex === null) return;
     const novasContas = [...contas];
     novasContas[contaAtualIndex].faturas!.push({ valor: novoValorFatura, vencimento: novaDataFatura });
     setContas(novasContas);
-
     setNovoValorFatura(0);
     setNovaDataFatura("");
   };
 
   const finalizarSetup = async () => {
     const user = auth.currentUser;
-    if (!user) {
-      alert("Usuário não logado!");
-      navigate("/login");
-      return;
-    }
-    try {
-      // Se pelo menos 1 conta tiver parcelamentos ativos
-      const temAlgumParcelamento = contas.some((c) => c.temParcelamentos);
+    if (!user) return navigate("/login");
 
-      await setDoc(
-        doc(db, "usuarios", user.uid),
-        {
-          contas,
-          temAlgumParcelamento, // 👈 agora a variável está em uso
-          dataInicio: new Date().toISOString(),
-          jaFezSetup: true,
-        },
-        { merge: true }
-      );
-      alert("Configuração salva com sucesso!");
+    try {
+      // MAPEAMENTO PARA O FORMATO DA DASHBOARD
+      const contasProcessadas = contas.map((conta) => {
+        const faturasMapeadas: any[] = [];
+
+        // Auxiliar para agrupar por MesAno
+        const processarItem = (mesAno: string, valor: number, itemNome: string, pAtual = 1, pTotal = 1) => {
+          let f = faturasMapeadas.find((fat) => fat.mesAno === mesAno);
+          const novoItem = { nome: itemNome, valorOriginal: valor, parcelaAtual: pAtual, totalParcelas: pTotal };
+          
+          if (f) {
+            f.valorTotal += valor;
+            f.itens.push(novoItem);
+          } else {
+            faturasMapeadas.push({
+              mesAno,
+              valorTotal: valor,
+              pago: false,
+              itens: [novoItem],
+              detalhesPagamento: []
+            });
+          }
+        };
+
+        // Se for modo COMPRA
+        conta.compras?.forEach((c) => {
+          c.parcelas.forEach((p, idx) => {
+            const mesAno = p.vencimento.slice(0, 7);
+            processarItem(mesAno, p.valor, c.nome, idx + 1, c.parcelas.length);
+          });
+        });
+
+        // Se for modo FATURA
+        conta.faturas?.forEach((f) => {
+          const mesAno = f.vencimento.slice(0, 7);
+          processarItem(mesAno, f.valor, "Saldo Anterior / Fatura");
+        });
+
+        return {
+          nome: conta.nome,
+          saldo: conta.saldo,
+          faturas: faturasMapeadas
+        };
+      });
+
+      await setDoc(doc(db, "usuarios", user.uid), {
+        contas: contasProcessadas,
+        entradas: [],
+        jaFezSetup: true,
+        dataSetup: new Date().toISOString()
+      }, { merge: true });
+
+      alert("Configuração finalizada!");
       navigate("/Dashboard");
     } catch (error: any) {
-      console.error(error);
-      alert("Erro ao salvar configuração: " + error.message);
+      alert("Erro ao salvar: " + error.message);
     }
   };
 
   const contaAtual = contaAtualIndex !== null ? contas[contaAtualIndex] : null;
 
   return (
-    <div style={{ maxWidth: "600px", margin: "50px auto", padding: "20px", display: "flex", flexDirection: "column" }}>
+    <div style={{ maxWidth: "600px", margin: "40px auto", padding: "20px", fontFamily: "sans-serif" }}>
       <h1>Configuração Inicial</h1>
 
-      {/* Criar nova conta */}
-      <div style={{ border: "1px solid #ccc", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
-        <h2>Adicionar Conta</h2>
-        <input
-          type="text"
-          placeholder="Nome da conta"
-          value={novaContaNome}
-          onChange={(e) => setNovaContaNome(e.target.value)}
-          style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
-        />
-        <input
-          type="number"
-          placeholder="Saldo inicial"
-          value={novoSaldo}
-          onChange={(e) => setNovoSaldo(Number(e.target.value))}
-          style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
-        />
-        <label style={{ marginBottom: "10px", display: "flex", alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={novoTemParcelamentos}
-            onChange={(e) => setNovoTemParcelamentos(e.target.checked)}
-            style={{ marginRight: "5px" }}
-          />
-          Tem parcelamentos ativos
+      <div style={{ border: "1px solid #ddd", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
+        <h2>1. Adicionar Conta</h2>
+        <input type="text" placeholder="Nome (Ex: Nubank, Carteira)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
+        <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} style={styles.input} />
+        <label style={{ display: "block", marginBottom: "10px" }}>
+          <input type="checkbox" checked={novoTemParcelamentos} onChange={(e) => setNovoTemParcelamentos(e.target.checked)} /> Tem parcelamentos/faturas?
         </label>
-        <button onClick={adicionarConta} style={{ padding: "10px" }}>
-          Salvar conta
-        </button>
+        <button onClick={adicionarConta} style={styles.btnBlue}>Salvar Conta</button>
       </div>
 
-      {/* Selecionar conta atual */}
       {contas.length > 0 && (
         <div style={{ marginBottom: "20px" }}>
-          <h3>Contas criadas:</h3>
-          <select
-            value={contaAtualIndex ?? ""}
-            onChange={(e) => setContaAtualIndex(Number(e.target.value))}
-            style={{ padding: "8px", width: "100%" }}
-          >
-            <option value="" disabled>
-              -- Selecione uma conta --
-            </option>
-            {contas.map((c, i) => (
-              <option key={i} value={i}>
-                {c.nome}
-              </option>
-            ))}
+          <h3>Contas cadastradas: {contas.map(c => c.nome).join(", ")}</h3>
+          <select value={contaAtualIndex ?? ""} onChange={(e) => setContaAtualIndex(Number(e.target.value))} style={styles.input}>
+            {contas.map((c, i) => <option key={i} value={i}>{c.nome}</option>)}
           </select>
         </div>
       )}
 
-      {/* Se conta selecionada tem parcelamentos, escolher modo */}
-      {contaAtual && contaAtual.temParcelamentos && !contaAtual.modo && (
-        <div style={{ marginBottom: "20px" }}>
-          <h3>Como deseja informar os parcelamentos?</h3>
-          <button onClick={() => selecionarModo("compra")} style={{ marginRight: "10px", padding: "10px" }}>
-            Por compra
-          </button>
-          <button onClick={() => selecionarModo("fatura")} style={{ padding: "10px" }}>
-            Por fatura
-          </button>
-        </div>
-      )}
-
-      {/* Formulário modo compra */}
-      {contaAtual && contaAtual.modo === "compra" && (
-        <div style={{ border: "1px solid #ccc", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
-          <h3>Adicionar Compra</h3>
-          <input
-            type="text"
-            placeholder="Nome da compra"
-            value={novaCompraNome}
-            onChange={(e) => setNovaCompraNome(e.target.value)}
-            style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
-          />
-          <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-            <input
-              type="number"
-              placeholder="Valor da parcela"
-              value={novoValorParcela}
-              onChange={(e) => setNovoValorParcela(Number(e.target.value))}
-              style={{ flex: 1, padding: "8px" }}
-            />
-            <input
-              type="date"
-              value={novaDataParcela}
-              onChange={(e) => setNovaDataParcela(e.target.value)}
-              style={{ flex: 1, padding: "8px" }}
-            />
-            <button onClick={adicionarParcela} style={{ padding: "8px" }}>
-              Adicionar parcela
-            </button>
-          </div>
-          {parcelasCompra.length > 0 && (
-            <ul style={{ marginBottom: "10px" }}>
-              {parcelasCompra.map((p, i) => (
-                <li key={i}>
-                  R$ {p.valor.toFixed(2)} - {p.vencimento}
-                </li>
-              ))}
-            </ul>
-          )}
-          <button onClick={salvarCompra} style={{ padding: "10px" }}>
-            Salvar compra
-          </button>
-
-          {contaAtual.compras && contaAtual.compras.length > 0 && (
-            <>
-              <h4>Compras adicionadas:</h4>
-              <ul>
-                {contaAtual.compras.map((c, i) => (
-                  <li key={i}>
-                    {c.nome} - Parcelas: {c.parcelas.map((p) => `R$${p.valor.toFixed(2)} (${p.vencimento})`).join(", ")}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Formulário modo fatura */}
-      {contaAtual && contaAtual.modo === "fatura" && (
-        <div style={{ border: "1px solid #ccc", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
-          <h3>Adicionar Fatura</h3>
-          <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-            <input
-              type="number"
-              placeholder="Valor da fatura"
-              value={novoValorFatura}
-              onChange={(e) => setNovoValorFatura(Number(e.target.value))}
-              style={{ flex: 1, padding: "8px" }}
-            />
-            <input
-              type="date"
-              value={novaDataFatura}
-              onChange={(e) => setNovaDataFatura(e.target.value)}
-              style={{ flex: 1, padding: "8px" }}
-            />
-            <button onClick={adicionarFatura} style={{ padding: "8px" }}>
-              Adicionar fatura
-            </button>
-          </div>
-          {contaAtual.faturas && contaAtual.faturas.length > 0 && (
-            <ul>
-              {contaAtual.faturas.map((f, i) => (
-                <li key={i}>
-                  R$ {f.valor.toFixed(2)} - {f.vencimento}
-                </li>
-              ))}
-            </ul>
+      {contaAtual?.temParcelamentos && (
+        <div style={{ border: "1px solid #eee", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
+          <h3>Parcelamentos de: {contaAtual.nome}</h3>
+          {!contaAtual.modo ? (
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => selecionarModo("compra")} style={styles.btn}>Lançar por Compras</button>
+              <button onClick={() => selecionarModo("fatura")} style={styles.btn}>Lançar por Faturas Fechadas</button>
+            </div>
+          ) : (
+            <div>
+              <p>Modo: <strong>{contaAtual.modo}</strong> <button onClick={() => selecionarModo(undefined as any)} style={{fontSize:10}}>trocar</button></p>
+              
+              {contaAtual.modo === "compra" ? (
+                <div>
+                  <input type="text" placeholder="Nome da Compra" value={novaCompraNome} onChange={e => setNovaCompraNome(e.target.value)} style={styles.input} />
+                  <div style={{ display: "flex", gap: 5 }}>
+                    <input type="number" placeholder="Valor Parcela" value={novoValorParcela || ""} onChange={e => setNovoValorParcela(Number(e.target.value))} style={styles.input} />
+                    <input type="date" value={novaDataParcela} onChange={e => setNovaDataParcela(e.target.value)} style={styles.input} />
+                    <button onClick={adicionarParcela}>+</button>
+                  </div>
+                  <ul>{parcelasCompra.map((p, i) => <li key={i}>R$ {p.valor} - {p.vencimento}</li>)}</ul>
+                  <button onClick={salvarCompra} style={styles.btnBlue}>Salvar Compra na Conta</button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display: "flex", gap: 5 }}>
+                    <input type="number" placeholder="Valor Total Fatura" value={novoValorFatura || ""} onChange={e => setNovoValorFatura(Number(e.target.value))} style={styles.input} />
+                    <input type="date" value={novaDataFatura} onChange={e => setNovaDataFatura(e.target.value)} style={styles.input} />
+                    <button onClick={adicionarFatura} style={styles.btnBlue}>Add Fatura</button>
+                  </div>
+                  <ul>{contaAtual.faturas?.map((f, i) => <li key={i}>R$ {f.valor} - {f.vencimento}</li>)}</ul>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
 
       {contas.length > 0 && (
-        <button onClick={finalizarSetup} style={{ padding: "15px", backgroundColor: "#4caf50", color: "#fff" }}>
-          Finalizar Configuração
-        </button>
+        <button onClick={finalizarSetup} style={styles.btnFinalizar}>Finalizar e ir para Dashboard</button>
       )}
     </div>
   );
 }
+
+const styles: any = {
+  input: { width: "100%", padding: "10px", marginBottom: "10px", boxSizing: "border-box", borderRadius: "4px", border: "1px solid #ccc" },
+  btn: { padding: "10px", cursor: "pointer" },
+  btnBlue: { width: "100%", padding: "10px", background: "#007bff", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" },
+  btnFinalizar: { width: "100%", padding: "15px", background: "#28a745", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "16px", fontWeight: "bold" }
+};
