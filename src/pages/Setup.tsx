@@ -6,8 +6,8 @@ import { doc, setDoc } from "firebase/firestore";
 interface Parcela {
   valor: number;
   vencimento: string;
-  numeroParcela: number; // Adicionado para controle
-  totalParcelas: number;  // Adicionado para controle
+  numeroParcela: number;
+  totalParcelas: number;
 }
 
 interface Compra {
@@ -23,6 +23,7 @@ interface FaturaSimples {
 interface Conta {
   nome: string;
   saldo: number;
+  pix?: string;
   temParcelamentos: boolean;
   modo?: "compra" | "fatura";
   compras?: Compra[];
@@ -37,9 +38,9 @@ export default function Setup() {
 
   const [novaContaNome, setNovaContaNome] = useState("");
   const [novoSaldo, setNovoSaldo] = useState<number>(0);
+  const [novaChavePix, setNovaChavePix] = useState("");
   const [novoTemParcelamentos, setNovoTemParcelamentos] = useState(false);
 
-  // Estados para Modo Compra (Atualizados)
   const [novaCompraNome, setNovaCompraNome] = useState("");
   const [valorTotalCompra, setValorTotalCompra] = useState<number>(0);
   const [qtdParcelas, setQtdParcelas] = useState<number>(1);
@@ -47,24 +48,40 @@ export default function Setup() {
   const [jurosPorcento, setJurosPorcento] = useState<number>(0);
   const [novaDataParcela, setNovaDataParcela] = useState<string>("");
 
-  // Estados para Modo Fatura
   const [novoValorFatura, setNovoValorFatura] = useState<number>(0);
   const [novaDataFatura, setNovaDataFatura] = useState<string>("");
 
   const adicionarConta = () => {
-    if (!novaContaNome) return alert("Preencha o nome da conta.");
+    const nomeLimpo = novaContaNome.trim();
+    const pixLimpo = novaChavePix.trim();
+
+    if (!nomeLimpo) return alert("Preencha o nome da conta.");
+
+    // Validação de Nome Duplicado
+    if (contas.some(c => c.nome.toLowerCase() === nomeLimpo.toLowerCase())) {
+      return alert("Já existe uma conta com este nome.");
+    }
+
+    // Validação de PIX Duplicado (se preenchido)
+    if (pixLimpo !== "" && contas.some(c => c.pix?.toLowerCase() === pixLimpo.toLowerCase())) {
+      return alert("Esta chave PIX já está cadastrada em outra conta.");
+    }
+
     const novaConta: Conta = {
-      nome: novaContaNome,
+      nome: nomeLimpo,
       saldo: novoSaldo,
+      pix: pixLimpo,
       temParcelamentos: novoTemParcelamentos,
       compras: [],
       faturas: [],
     };
+
     const novasContas = [...contas, novaConta];
     setContas(novasContas);
     setContaAtualIndex(novasContas.length - 1);
     setNovaContaNome("");
     setNovoSaldo(0);
+    setNovaChavePix("");
     setNovoTemParcelamentos(false);
   };
 
@@ -79,19 +96,15 @@ export default function Setup() {
     if (!valorTotalCompra || !novaDataParcela || qtdParcelas <= 0) {
       return alert("Preencha valor total, data e parcelas.");
     }
-
     const valorComJuros = valorTotalCompra * (1 + jurosPorcento / 100);
     const valorDaParcela = valorComJuros / qtdParcelas;
     const novasParcelas: Parcela[] = [];
 
-    // Começa a gerar a partir da primeira parcela que NÃO está paga
     for (let i = 0; i < qtdParcelas; i++) {
       const numeroAtual = i + 1;
-
       if (numeroAtual > parcelasPagas) {
         const dataRef = new Date(novaDataParcela + "T00:00:00");
         dataRef.setMonth(dataRef.getMonth() + (i - parcelasPagas));
-        
         novasParcelas.push({
           valor: valorDaParcela,
           vencimento: dataRef.toISOString().slice(0, 10),
@@ -107,14 +120,9 @@ export default function Setup() {
       nome: novaCompraNome, 
       parcelas: novasParcelas 
     });
-
     setContas(novasContas);
-    setNovaCompraNome("");
-    setValorTotalCompra(0);
-    setQtdParcelas(1);
-    setParcelasPagas(0);
-    setJurosPorcento(0);
-    setNovaDataParcela("");
+    setNovaCompraNome(""); setValorTotalCompra(0); setQtdParcelas(1);
+    setParcelasPagas(0); setJurosPorcento(0); setNovaDataParcela("");
     alert("Compra parcelada adicionada!");
   };
 
@@ -124,8 +132,7 @@ export default function Setup() {
     const novasContas = [...contas];
     novasContas[contaAtualIndex].faturas!.push({ valor: novoValorFatura, vencimento: novaDataFatura });
     setContas(novasContas);
-    setNovoValorFatura(0);
-    setNovaDataFatura("");
+    setNovoValorFatura(0); setNovaDataFatura("");
   };
 
   const finalizarSetup = async () => {
@@ -135,21 +142,15 @@ export default function Setup() {
     try {
       const contasProcessadas = contas.map((conta) => {
         const faturasMapeadas: any[] = [];
-
         const processarItem = (mesAno: string, valor: number, itemNome: string, pAtual = 1, pTotal = 1) => {
           let f = faturasMapeadas.find((fat) => fat.mesAno === mesAno);
           const novoItem = { nome: itemNome, valorOriginal: valor, parcelaAtual: pAtual, totalParcelas: pTotal };
-          
           if (f) {
             f.valorTotal += valor;
             f.itens.push(novoItem);
           } else {
             faturasMapeadas.push({
-              mesAno,
-              valorTotal: valor,
-              pago: false,
-              itens: [novoItem],
-              detalhesPagamento: []
+              mesAno, valorTotal: valor, pago: false, itens: [novoItem], detalhesPagamento: []
             });
           }
         };
@@ -166,7 +167,12 @@ export default function Setup() {
           processarItem(mesAno, f.valor, "Saldo Anterior / Fatura");
         });
 
-        return { nome: conta.nome, saldo: conta.saldo, faturas: faturasMapeadas };
+        return { 
+          nome: conta.nome, 
+          saldo: conta.saldo, 
+          pix: conta.pix || "", 
+          faturas: faturasMapeadas 
+        };
       });
 
       await setDoc(doc(db, "usuarios", user.uid), {
@@ -193,6 +199,8 @@ export default function Setup() {
         <h2>1. Adicionar Conta</h2>
         <input type="text" placeholder="Nome (Ex: Nubank)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
         <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} style={styles.input} />
+        <input type="text" placeholder="Chave PIX (Opcional)" value={novaChavePix} onChange={(e) => setNovaChavePix(e.target.value)} style={styles.input} />
+        
         <label style={{ display: "block", marginBottom: "10px" }}>
           <input type="checkbox" checked={novoTemParcelamentos} onChange={(e) => setNovoTemParcelamentos(e.target.checked)} /> Tem parcelamentos/faturas?
         </label>
@@ -201,7 +209,7 @@ export default function Setup() {
 
       {contas.length > 0 && (
         <div style={{ marginBottom: "20px" }}>
-          <h3>Contas cadastradas: {contas.map(c => c.nome).join(", ")}</h3>
+          <h3>Contas cadastradas:</h3>
           <select value={contaAtualIndex ?? ""} onChange={(e) => setContaAtualIndex(Number(e.target.value))} style={styles.input}>
             {contas.map((c, i) => <option key={i} value={i}>{c.nome}</option>)}
           </select>
