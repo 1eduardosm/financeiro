@@ -9,9 +9,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [contasExpandidas, setContasExpandidas] = useState<Record<string, boolean>>({});
   const [cardsExpandidos, setCardsExpandidos] = useState<Record<string, boolean>>({
-    entrada: true,
-    saida: true,
-    compra: true
+    entrada: false,
+    saida: false,
+    compra: false
   });
 
   // Estados para Nova Conta
