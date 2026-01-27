@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/financeiro/static/js/main.f10f7d0c.js",
+    "main.js": "/financeiro/static/js/main.cf1c6390.js",
     "index.html": "/financeiro/index.html",
-    "main.f10f7d0c.js.map": "/financeiro/static/js/main.f10f7d0c.js.map"
+    "main.cf1c6390.js.map": "/financeiro/static/js/main.cf1c6390.js.map"
   },
   "entrypoints": [
-    "static/js/main.f10f7d0c.js"
+    "static/js/main.cf1c6390.js"
   ]
 }
