@@ -351,32 +351,45 @@ export default function Dashboard() {
 
       {/* LISTA DE CONTAS */}
       <div>
-        {contas.map((conta) => (
-          <div key={conta.id} style={{border:'1px solid #ddd', borderRadius:8, padding:12, marginBottom:10, background:'#fdfdfd'}}>
-            <h3 onClick={() => setContasExpandidas({...contasExpandidas, [conta.id]: !contasExpandidas[conta.id]})} style={{cursor:'pointer', margin:0}}>
-              {contasExpandidas[conta.id] ? "▼" : "▶"} {conta.nome} — R$ {(conta.saldo || 0).toFixed(2)}
-            </h3>
-            {contasExpandidas[conta.id] && (
-              <div style={{marginTop:15, maxHeight: '350px', overflowY: 'auto', paddingRight: '5px'}}>
-                {(!conta.faturas || conta.faturas.length === 0) ? (
-                  <p style={{fontSize: 13, color: '#999', textAlign: 'center', padding: '10px 0'}}>Sem faturas por aqui</p>
+        {contas.map((conta, idx) => (
+          <div key={conta.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 10, background: '#fdfdfd' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 onClick={() => setContasExpandidas({ ...contasExpandidas, [conta.id]: !contasExpandidas[conta.id] })} style={{ cursor: 'pointer', margin: 0 }}>
+                {contasExpandidas[conta.id] ? "▼" : "▶"} {conta.nome} — R$ {(conta.saldo || 0).toFixed(2)}
+              </h3>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {conta.pix ? (
+                  <>
+                    <button onClick={() => copiarPix(conta.pix)} style={styles.btnSmall}>Copiar PIX</button>
+                    <button onClick={() => setEditPixInfo({ index: idx, chave: conta.pix })} style={styles.btnSmall}>Alterar</button>
+                    <button onClick={() => { if (window.confirm("Remover PIX?")) gerenciarPix(idx, null) }} style={{ ...styles.btnSmall, color: 'red' }}>Remover</button>
+                  </>
                 ) : (
-                  conta.faturas.sort((a:any, b:any) => (a.mesAno || "").localeCompare(b.mesAno || ""))
-                    .map((f:any, fIdx:number) => (
-                    <div key={f.mesAno} style={{padding:'10px 0', borderBottom:'1px solid #f0f0f0'}}>
-                      <div style={{display:'flex', justifyContent:'space-between'}}>
-                        <strong>{f.mesAno}</strong>
-                        <span style={{color: f.pago ? 'green' : 'red'}}>{f.pago ? "PAGA" : `R$ ${(f.valorTotal || 0).toFixed(2)}`}</span>
+                  <button onClick={() => setEditPixInfo({ index: idx, chave: "" })} style={styles.btnSmall}>+ Chave PIX</button>
+                )}
+              </div>
+            </div>
+            {contasExpandidas[conta.id] && (
+              <div style={{ marginTop: 15, maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
+                {(!conta.faturas || conta.faturas.length === 0) ? (
+                  <p style={{ fontSize: 13, color: '#999', textAlign: 'center', padding: '10px 0' }}>Sem faturas por aqui</p>
+                ) : (
+                  conta.faturas.sort((a: any, b: any) => (a.mesAno || "").localeCompare(b.mesAno || ""))
+                    .map((f: any, fIdx: number) => (
+                      <div key={f.mesAno} style={{ padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <strong>{f.mesAno}</strong>
+                          <span style={{ color: f.pago ? 'green' : 'red' }}>{f.pago ? "PAGA" : `R$ ${(f.valorTotal || 0).toFixed(2)}`}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#666', margin: '4px 0' }}>
+                          {(f.itens || []).map((it: any, i: number) => <div key={i}>• {it.nome} ({it.parcelaAtual}/{it.totalParcelas})</div>)}
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
+                          {!f.pago && <button onClick={() => setPagamentoFatura({ cIdx: contas.indexOf(conta), fIdx })} style={styles.btnSmall}>Abater</button>}
+                          <button onClick={() => setVerDetalhes(f.detalhesPagamento)} style={{ ...styles.btnSmall, backgroundColor: '#eee' }}>Histórico Pgto</button>
+                        </div>
                       </div>
-                      <div style={{fontSize:11, color:'#666', margin: '4px 0'}}>
-                        {(f.itens || []).map((it:any, i:number) => <div key={i}>• {it.nome} ({it.parcelaAtual}/{it.totalParcelas})</div>)}
-                      </div>
-                      <div style={{display:'flex', gap:10, marginTop:5}}>
-                        {!f.pago && <button onClick={() => setPagamentoFatura({cIdx: contas.indexOf(conta), fIdx})} style={styles.btnSmall}>Abater</button>}
-                        <button onClick={() => setVerDetalhes(f.detalhesPagamento)} style={{...styles.btnSmall, backgroundColor:'#eee'}}>Histórico Pgto</button>
-                      </div>
-                    </div>
-                  ))
+                    ))
                 )}
               </div>
             )}
