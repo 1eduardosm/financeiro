@@ -14,21 +14,32 @@ export default function Dashboard() {
     compra: false
   });
 
-  // Estados para Nova Conta
+  // --- ESTADOS PARA O MODAL DE NOVA CONTA (ESTILO SETUP) ---
   const [modalNovaConta, setModalNovaConta] = useState(false);
-  const [novoNomeConta, setNovoNomeConta] = useState("");
-  const [novoSaldoConta, setNovoSaldoConta] = useState(0);
-  const [novoPixConta, setNovoPixConta] = useState("");
+  const [novaContaNome, setNovaContaNome] = useState("");
+  const [novoSaldo, setNovoSaldo] = useState(0);
+  const [novaChavePix, setNovaChavePix] = useState("");
+  const [novoTemParcelamentos, setNovoTemParcelamentos] = useState(false);
 
-  // Estado para Alterar Chave Pix
+  const [modoSetup, setModoSetup] = useState<"compra" | "fatura" | undefined>(undefined);
+  const [comprasTemporarias, setComprasTemporarias] = useState<any[]>([]);
+  const [faturasTemporarias, setFaturasTemporarias] = useState<any[]>([]);
+
+  const [setupCompraNome, setSetupCompraNome] = useState("");
+  const [setupValorTotal, setSetupValorTotal] = useState(0);
+  const [setupQtdParc, setSetupQtdParc] = useState(1);
+  const [setupParcPagas, setSetupParcPagas] = useState(0);
+  const [setupJuros, setSetupJuros] = useState(0);
+  const [setupDataParc, setSetupDataParc] = useState("");
+  const [setupValFat, setSetupValFat] = useState(0);
+  const [setupDatFat, setSetupDatFat] = useState("");
+  // -------------------------------------------------------
+
   const [editPixInfo, setEditPixInfo] = useState<{ index: number, chave: string } | null>(null);
-
-  // Estados de Histórico e Filtros
   const [modalHistorico, setModalHistorico] = useState(false);
   const [mesFiltroHistorico, setMesFiltroHistorico] = useState(new Date().toISOString().slice(0, 7));
   const [verDetalhes, setVerDetalhes] = useState<any[] | null>(null);
 
-  // Estados dos formulários de lançamento
   const [valorEntrada, setValorEntrada] = useState<number>(0);
   const [descricaoEntrada, setDescricaoEntrada] = useState<string>("");
   const [contaEntradaId, setContaEntradaId] = useState<string>("");
@@ -44,7 +55,6 @@ export default function Dashboard() {
   const [compraDataInicio, setCompraDataInicio] = useState(new Date().toISOString().slice(0, 7));
   const [compraContaId, setCompraContaId] = useState("");
 
-  // Estados de Pagamento/Abatimento
   const [pagamentoFatura, setPagamentoFatura] = useState<any>(null);
   const [fontesDePagamento, setFontesDePagamento] = useState<any[]>([]);
   const [novoValor, setNovoValor] = useState<number>(0);
@@ -88,49 +98,84 @@ export default function Dashboard() {
     await updateDoc(doc(db, "usuarios", uid), { contas: save, entradas: nEntradas });
   };
 
-  // --- ADICIONAR CONTA COM VALIDAÇÃO DE NOME E PIX ---
-  const adicionarNovaConta = async () => {
-    if (!novoNomeConta.trim()) return alert("Informe o nome da conta");
+  // --- LÓGICA DE CRIAÇÃO DE CONTA (IGUAL AO SETUP) ---
+  const incluirCompraNoSetup = () => {
+    if (!setupCompraNome || !setupValorTotal || !setupDataParc) return alert("Preencha os dados da compra");
+    const valorComJuros = setupValorTotal * (1 + (setupJuros || 0) / 100);
+    const vParc = valorComJuros / setupQtdParc;
+    const parcelasGeradas = [];
+    for (let i = 0; i < setupQtdParc; i++) {
+      const num = i + 1;
+      if (num > setupParcPagas) {
+        const d = new Date(setupDataParc + "T00:00:00");
+        d.setMonth(d.getMonth() + (i - setupParcPagas));
+        parcelasGeradas.push({
+          valor: vParc,
+          vencimento: d.toISOString().slice(0, 10),
+          numeroParcela: num,
+          totalParcelas: setupQtdParc
+        });
+      }
+    }
+    setComprasTemporarias([...comprasTemporarias, { nome: setupCompraNome, parcelas: parcelasGeradas }]);
+    setSetupCompraNome(""); setSetupValorTotal(0); setSetupJuros(0);
+    alert("Compra adicionada à lista!");
+  };
 
-    // Validação de Nome Duplicado
-    if (contas.some(c => c.nome.toLowerCase().trim() === novoNomeConta.toLowerCase().trim())) {
-      return alert("Já existe uma conta com este nome.");
+  const incluirFaturaNoSetup = () => {
+    if (!setupValFat || !setupDatFat) return alert("Dados incompletos");
+    setFaturasTemporarias([...faturasTemporarias, { valor: setupValFat, vencimento: setupDatFat }]);
+    setSetupValFat(0); setSetupDatFat("");
+    alert("Fatura adicionada!");
+  };
+
+  const adicionarContaFinal = async () => {
+    const nomeLimpo = novaContaNome.trim();
+    const pixLimpo = novaChavePix.trim(); // Limpar espaços do PIX
+
+    if (!nomeLimpo) return alert("Informe o nome da conta");
+
+    // 1. Validação de Nome Duplicado
+    if (contas.some(c => c.nome.toLowerCase() === nomeLimpo.toLowerCase())) {
+      return alert("Nome de conta já existe");
     }
 
-    // Validação de PIX Duplicado (se preenchido)
-    if (novoPixConta.trim() !== "" && contas.some(c => c.pix === novoPixConta.trim())) {
+    // 2. Validação de PIX Duplicado (Nova parte aqui)
+    if (pixLimpo !== "" && contas.some(c => c.pix === pixLimpo)) {
       return alert("Esta chave PIX já está cadastrada em outra conta.");
     }
 
-    const nova = { nome: novoNomeConta, id: novoNomeConta, saldo: novoSaldoConta, pix: novoPixConta.trim(), faturas: [] };
-    const nContas = [...contas, nova];
-    setContas(nContas);
-    await atualizarFirebase(nContas, entradas);
-    setModalNovaConta(false); setNovoNomeConta(""); setNovoSaldoConta(0); setNovoPixConta("");
+    const faturasMapeadas: any[] = [];
+    const inserirItem = (mesAno: string, valor: number, itemNome: string, pA = 1, pT = 1) => {
+      let fat = faturasMapeadas.find(f => f.mesAno === mesAno);
+      const novoItem = { nome: itemNome, valorOriginal: valor, parcelaAtual: pA, totalParcelas: pT };
+      if (fat) {
+        fat.valorTotal += valor;
+        fat.itens.push(novoItem);
+      } else {
+        faturasMapeadas.push({ mesAno, valorTotal: valor, pago: false, itens: [novoItem], detalhesPagamento: [] });
+      }
+    };
+
+    comprasTemporarias.forEach(c => c.parcelas.forEach((p: any) => inserirItem(p.vencimento.slice(0, 7), p.valor, c.nome, p.numeroParcela, p.totalParcelas)));
+    faturasTemporarias.forEach(f => inserirItem(f.vencimento.slice(0, 7), f.valor, "Saldo Anterior / Fatura"));
+
+    const novaConta = { id: nomeLimpo, nome: nomeLimpo, saldo: novoSaldo, pix: novaChavePix.trim(), faturas: faturasMapeadas };
+    const novasContas = [...contas, novaConta];
+
+    try {
+      await atualizarFirebase(novasContas, entradas);
+      setContas(novasContas);
+      setModalNovaConta(false);
+      // Reset
+      setNovaContaNome(""); setNovoSaldo(0); setNovaChavePix(""); setNovoTemParcelamentos(false);
+      setComprasTemporarias([]); setFaturasTemporarias([]); setModoSetup(undefined);
+      alert("Conta adicionada com sucesso!");
+    } catch (e) { alert("Erro ao salvar"); }
   };
 
-  // --- GERENCIAR PIX COM VALIDAÇÃO DE DUPLICIDADE ---
-  const gerenciarPix = async (index: number, novaChave: string | null) => {
-    const nContas = [...contas];
-    const chaveLimpa = novaChave ? novaChave.trim() : "";
+  // --- OUTRAS FUNÇÕES DE MANIPULAÇÃO ---
 
-    // Validação de PIX Duplicado na Alteração (ignora a própria conta atual)
-    if (chaveLimpa !== "" && contas.some((c, idx) => c.pix === chaveLimpa && idx !== index)) {
-      return alert("Esta chave PIX já pertence a outra conta.");
-    }
-
-    nContas[index].pix = chaveLimpa;
-    setContas(nContas);
-    await atualizarFirebase(nContas, entradas);
-    setEditPixInfo(null);
-  };
-
-  const copiarPix = (chave: string) => {
-    navigator.clipboard.writeText(chave);
-    alert("Chave PIX copiada!");
-  };
-
-  // --- RESTANTE DA LÓGICA (LANÇAMENTOS/HISTÓRICO) ---
   const registrarEntrada = async () => {
     if (!uid || valorEntrada <= 0) return;
     const nContas = contas.map(c => c.id === contaEntradaId ? { ...c, saldo: (c.saldo || 0) + valorEntrada } : c);
@@ -181,14 +226,12 @@ export default function Dashboard() {
     fat.valorTotal = (fat.valorTotal || 0) - totalSessao;
     fat.detalhesPagamento = [...(fat.detalhesPagamento || []), ...fontesDePagamento];
     if (fat.valorTotal <= 0.01) { fat.pago = true; fat.valorTotal = 0; }
-
     fontesDePagamento.forEach(f => {
       if (f.tipo === 'saldo') {
         const cOrigem = nContas.find(c => c.id === f.contaOrigemId);
         if (cOrigem) cOrigem.saldo = (cOrigem.saldo || 0) - f.valor;
       }
     });
-
     setContas(nContas);
     await atualizarFirebase(nContas, entradas);
     setPagamentoFatura(null); setFontesDePagamento([]);
@@ -198,6 +241,27 @@ export default function Dashboard() {
 
   if (loading) return <div style={{ padding: 20 }}>Carregando...</div>;
 
+  // --- GERENCIAR PIX COM VALIDAÇÃO DE DUPLICIDADE ---
+  const gerenciarPix = async (index: number, novaChave: string | null) => {
+    const nContas = [...contas];
+    const chaveLimpa = novaChave ? novaChave.trim() : "";
+
+    // Validação de PIX Duplicado na Alteração (ignora a própria conta atual)
+    if (chaveLimpa !== "" && contas.some((c, idx) => c.pix === chaveLimpa && idx !== index)) {
+      return alert("Esta chave PIX já pertence a outra conta.");
+    }
+
+    nContas[index].pix = chaveLimpa;
+    setContas(nContas);
+    await atualizarFirebase(nContas, entradas);
+    setEditPixInfo(null);
+  };
+
+  const copiarPix = (chave: string) => {
+    navigator.clipboard.writeText(chave);
+    alert("Chave PIX copiada!");
+  };
+
   return (
     <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto" }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #860204', marginBottom: 20, paddingBottom: 10 }}>
@@ -205,7 +269,7 @@ export default function Dashboard() {
         <button onClick={() => signOut(auth)} style={styles.btnLogout}>Sair</button>
       </div>
 
-      {/* CARDS DE LANÇAMENTO */}
+      {/* CARDS DE LANÇAMENTOS RÁPIDOS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10, marginBottom: 20 }}>
         <div style={{ ...styles.card, borderLeft: '5px solid #28a745' }}>
           <div onClick={() => setCardsExpandidos({ ...cardsExpandidos, entrada: !cardsExpandidos.entrada })} style={styles.cardHeaderToggle}>
@@ -264,112 +328,146 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* HISTÓRICO RECENTE */}
-      <div style={{...styles.card, marginBottom: 20}}>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}}>
-          <h4 style={{margin: 0}}>Atividade Recente</h4>
+      {/* ATIVIDADE RECENTE */}
+      <div style={{ ...styles.card, marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h4 style={{ margin: 0 }}>Atividade Recente</h4>
           <button onClick={() => setModalHistorico(true)} style={styles.btnSmall}>Explorar por Mês</button>
         </div>
-        <div style={{maxHeight: '200px', overflowY: 'auto'}}>
-          {entradas.length === 0 ? (
-            <p style={{fontSize: 12, color: '#999'}}>Nenhuma movimentação ainda.</p>
-          ) : (
+        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+          {entradas.length === 0 ? <p style={{ fontSize: 12, color: '#999' }}>Nenhuma movimentação ainda.</p> :
             entradas.slice(0, 10).map((m, i) => (
-              <div key={i} style={{display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f9f9f9', fontSize: 13}}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f9f9f9', fontSize: 13 }}>
                 <span>
-                  <span style={{color: m.valor > 0 ? 'green' : 'red', fontWeight: 'bold', marginRight: 8}}>
-                    {m.valor > 0 ? '↑' : '↓'}
-                  </span>
+                  <span style={{ color: m.valor > 0 ? 'green' : 'red', fontWeight: 'bold', marginRight: 8 }}>{m.valor > 0 ? '↑' : '↓'}</span>
                   {m.descricao || (m.valor > 0 ? 'Entrada' : 'Saída')}
-                  <small style={{display: 'block', color: '#999', fontSize: 10}}>{m.data} • {m.contaId}</small>
+                  <small style={{ display: 'block', color: '#999', fontSize: 10 }}>{m.data} • {m.contaId}</small>
                 </span>
-                <span style={{fontWeight: 'bold'}}>R$ {Math.abs(m.valor).toFixed(2)}</span>
+                <span style={{ fontWeight: 'bold' }}>R$ {Math.abs(m.valor).toFixed(2)}</span>
               </div>
-            ))
-          )}
+            ))}
         </div>
       </div>
 
-      {/* LISTAGEM DE CONTAS */}
-      <h3 style={{ marginBottom: 10 }}>Minhas Contas</h3>
-      {contas.map((conta, idx) => (
-        <div key={conta.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 10, background: '#fdfdfd' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h4 onClick={() => setContasExpandidas({ ...contasExpandidas, [conta.id]: !contasExpandidas[conta.id] })} style={{ cursor: 'pointer', margin: 0 }}>
-              {contasExpandidas[conta.id] ? "▼" : "▶"} {conta.nome} — R$ {conta.saldo.toFixed(2)}
-            </h4>
-
-            <div style={{ display: 'flex', gap: 5 }}>
-              {conta.pix ? (
-                <>
-                  <button onClick={() => copiarPix(conta.pix)} style={styles.btnSmall}>Copiar PIX</button>
-                  <button onClick={() => setEditPixInfo({ index: idx, chave: conta.pix })} style={styles.btnSmall}>Alterar</button>
-                  <button onClick={() => { if (window.confirm("Remover PIX?")) gerenciarPix(idx, null) }} style={{ ...styles.btnSmall, color: 'red' }}>Remover</button>
-                </>
-              ) : (
-                <button onClick={() => setEditPixInfo({ index: idx, chave: "" })} style={styles.btnSmall}>+ Chave PIX</button>
-              )}
-            </div>
+      {/* LISTA DE CONTAS */}
+      <div>
+        {contas.map((conta) => (
+          <div key={conta.id} style={{border:'1px solid #ddd', borderRadius:8, padding:12, marginBottom:10, background:'#fdfdfd'}}>
+            <h3 onClick={() => setContasExpandidas({...contasExpandidas, [conta.id]: !contasExpandidas[conta.id]})} style={{cursor:'pointer', margin:0}}>
+              {contasExpandidas[conta.id] ? "▼" : "▶"} {conta.nome} — R$ {(conta.saldo || 0).toFixed(2)}
+            </h3>
+            {contasExpandidas[conta.id] && (
+              <div style={{marginTop:15, maxHeight: '350px', overflowY: 'auto', paddingRight: '5px'}}>
+                {(!conta.faturas || conta.faturas.length === 0) ? (
+                  <p style={{fontSize: 13, color: '#999', textAlign: 'center', padding: '10px 0'}}>Sem faturas por aqui</p>
+                ) : (
+                  conta.faturas.sort((a:any, b:any) => (a.mesAno || "").localeCompare(b.mesAno || ""))
+                    .map((f:any, fIdx:number) => (
+                    <div key={f.mesAno} style={{padding:'10px 0', borderBottom:'1px solid #f0f0f0'}}>
+                      <div style={{display:'flex', justifyContent:'space-between'}}>
+                        <strong>{f.mesAno}</strong>
+                        <span style={{color: f.pago ? 'green' : 'red'}}>{f.pago ? "PAGA" : `R$ ${(f.valorTotal || 0).toFixed(2)}`}</span>
+                      </div>
+                      <div style={{fontSize:11, color:'#666', margin: '4px 0'}}>
+                        {(f.itens || []).map((it:any, i:number) => <div key={i}>• {it.nome} ({it.parcelaAtual}/{it.totalParcelas})</div>)}
+                      </div>
+                      <div style={{display:'flex', gap:10, marginTop:5}}>
+                        {!f.pago && <button onClick={() => setPagamentoFatura({cIdx: contas.indexOf(conta), fIdx})} style={styles.btnSmall}>Abater</button>}
+                        <button onClick={() => setVerDetalhes(f.detalhesPagamento)} style={{...styles.btnSmall, backgroundColor:'#eee'}}>Histórico Pgto</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
-
-          {contasExpandidas[conta.id] && (
-            <div style={{ marginTop: 15, borderTop: '1px solid #eee', paddingTop: 10 }}>
-              {conta.faturas.length === 0 ? <p style={{ fontSize: 11, color: '#999' }}>Sem faturas.</p> :
-                conta.faturas.sort((a: any, b: any) => a.mesAno.localeCompare(b.mesAno)).map((f: any, fIdx: number) => (
-                  <div key={f.mesAno} style={{ padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <strong>{f.mesAno}</strong>
-                      <span style={{ color: f.pago ? 'green' : 'red', fontWeight: 'bold' }}>{f.pago ? "PAGA" : `R$ ${f.valorTotal.toFixed(2)}`}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
-                      {!f.pago && <button onClick={() => setPagamentoFatura({ cIdx: contas.indexOf(conta), fIdx })} style={styles.btnSmall}>Abater</button>}
-                      <button onClick={() => setVerDetalhes(f.detalhesPagamento)} style={{ ...styles.btnSmall, backgroundColor: '#eee' }}>Histórico Pgto</button>
-                    </div>
-                  </div>
-                ))
-              }
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
 
       <button onClick={() => setModalNovaConta(true)} style={{ ...styles.btn, backgroundColor: '#eee', color: '#333', border: '1px dashed #ccc', marginTop: 10 }}>
         + Adicionar Nova Conta
       </button>
 
-      {/* MODAL DETALHES DO PAGAMENTO (HISTÓRICO DA FATURA) */}
+      {/* MODAL ADICIONAR CONTA (COMPORTAMENTO SETUP) */}
+      {modalNovaConta && (
+        <div style={styles.overlay}>
+          <div style={{ ...styles.modal, width: '90%', maxWidth: '450px' }}>
+            <div style={styles.card}>
+              <h2 style={{ marginTop: 0 }}>Nova Conta</h2>
+              <input type="text" placeholder="Nome (Ex: Nubank)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
+              <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} style={styles.input} />
+              <input type="text" placeholder="Chave PIX (Opcional)" value={novaChavePix} onChange={(e) => setNovaChavePix(e.target.value)} style={styles.input} />
+
+              <label style={{ display: "block", marginBottom: "10px" }}>
+                <input type="checkbox" checked={novoTemParcelamentos} onChange={(e) => setNovoTemParcelamentos(e.target.checked)} /> Tem parcelamentos/faturas?
+              </label>
+            </div>
+
+            {novoTemParcelamentos && (
+              <div style={styles.card}>
+                <h3>Lançamentos Iniciais</h3>
+                {!modoSetup ? (
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button onClick={() => setModoSetup("compra")} style={styles.btn}>Lançar Compra</button>
+                    <button onClick={() => setModoSetup("fatura")} style={styles.btn}>Lançar Fatura</button>
+                  </div>
+                ) : (
+                  <div>
+                    <p>Modo: <strong>{modoSetup}</strong> <button onClick={() => setModoSetup(undefined)} style={{ fontSize: 10 }}>trocar</button></p>
+
+                    {modoSetup === "compra" ? (
+                      <div>
+                        <input type="text" placeholder="Produto/Loja" value={setupCompraNome} onChange={e => setSetupCompraNome(e.target.value)} style={styles.input} />
+                        <input type="number" placeholder="Valor Total" value={setupValorTotal || ""} onChange={e => setSetupValorTotal(Number(e.target.value))} style={styles.input} />
+                        <input type="number" placeholder="Juros %" value={setupJuros || ""} onChange={e => setSetupJuros(Number(e.target.value))} style={styles.input} />
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Total Parc.</label><input type="number" value={setupQtdParc} onChange={e => setSetupQtdParc(Number(e.target.value))} style={styles.input} /></div>
+                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Já pagas</label><input type="number" value={setupParcPagas} onChange={e => setSetupParcPagas(Number(e.target.value))} style={styles.input} /></div>
+                        </div>
+                        <label style={{ fontSize: 10 }}>Vencimento da Próxima</label>
+                        <input type="date" value={setupDataParc} onChange={e => setSetupDataParc(e.target.value)} style={styles.input} />
+                        <button onClick={incluirCompraNoSetup} style={styles.btnBlue}>+ Adicionar à Lista</button>
+                        <small>{comprasTemporarias.length} compras na fila</small>
+                      </div>
+                    ) : (
+                      <div>
+                        <input type="number" placeholder="Valor Total Fatura" value={setupValFat || ""} onChange={e => setSetupValFat(Number(e.target.value))} style={styles.input} />
+                        <input type="date" value={setupDatFat} onChange={e => setSetupDatFat(e.target.value)} style={styles.input} />
+                        <button onClick={incluirFaturaNoSetup} style={styles.btnBlue}>+ Adicionar à Lista</button>
+                        <small>{faturasTemporarias.length} faturas na fila</small>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={adicionarContaFinal} style={styles.btnFinalizar}>Salvar e Criar Conta</button>
+            <button onClick={() => setModalNovaConta(false)} style={{ ...styles.btn, marginTop: 10, backgroundColor: '#666', color: 'white' }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* OUTROS MODAIS (HISTÓRICO, DETALHES, PAGAMENTO) MANTIDOS IGUAIS */}
       {verDetalhes && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, width: '400px' }}>
             <h3>Histórico de Abatimentos</h3>
             <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-              {verDetalhes.length === 0 ? (
-                <p style={{ fontSize: 13, color: '#666' }}>Nenhum pagamento registrado.</p>
-              ) : (
+              {verDetalhes.length === 0 ? <p style={{ fontSize: 13, color: '#666' }}>Nenhum pagamento registrado.</p> :
                 verDetalhes.map((detalhe, i) => (
                   <div key={i} style={{ padding: '10px 0', borderBottom: '1px solid #eee', fontSize: 13 }}>
                     <strong>Valor:</strong> R$ {detalhe.valor.toFixed(2)} <br />
                     <strong>Tipo:</strong> {detalhe.tipo === 'saldo' ? 'Saldo em Conta' : 'Terceiros'} <br />
-                    {detalhe.tipo === 'saldo' ? (
-                      <span><strong>Origem:</strong> {detalhe.contaOrigemId}</span>
-                    ) : (
-                      <span><strong>Info:</strong> {detalhe.descricao}</span>
-                    )}
+                    {detalhe.tipo === 'saldo' ? <span><strong>Origem:</strong> {detalhe.contaOrigemId}</span> : <span><strong>Info:</strong> {detalhe.descricao}</span>}
                   </div>
-                ))
-              )}
+                ))}
             </div>
-            <button
-              onClick={() => setVerDetalhes(null)}
-              style={{ ...styles.btn, marginTop: 15, backgroundColor: '#666', color: 'white' }}
-            >
-              Fechar
-            </button>
+            <button onClick={() => setVerDetalhes(null)} style={{ ...styles.btn, marginTop: 15, backgroundColor: '#666', color: 'white' }}>Fechar</button>
           </div>
         </div>
       )}
 
-      {/* MODAL GESTÃO PIX */}
       {editPixInfo && (
         <div style={styles.overlay}>
           <div style={styles.modal}>
@@ -381,21 +479,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* MODAL NOVA CONTA */}
-      {modalNovaConta && (
-        <div style={styles.overlay}>
-          <div style={styles.modal}>
-            <h3>Nova Conta</h3>
-            <input type="text" placeholder="Nome" value={novoNomeConta} onChange={e => setNovoNomeConta(e.target.value)} style={styles.input} />
-            <input type="number" placeholder="Saldo Inicial" value={novoSaldoConta || ""} onChange={e => setNovoSaldoConta(Number(e.target.value))} style={styles.input} />
-            <input type="text" placeholder="Chave PIX (Opcional)" value={novoPixConta} onChange={e => setNovoPixConta(e.target.value)} style={styles.input} />
-            <button onClick={adicionarNovaConta} style={{ ...styles.btn, backgroundColor: '#28a745', color: 'white', marginBottom: 5 }}>Criar</button>
-            <button onClick={() => setModalNovaConta(false)} style={{ ...styles.btn, backgroundColor: '#666', color: 'white' }}>Cancelar</button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL HISTÓRICO */}
       {modalHistorico && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, width: '450px' }}>
@@ -413,7 +496,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* MODAL ABATER FATURA */}
       {pagamentoFatura && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, width: '400px' }}>
@@ -445,12 +527,14 @@ export default function Dashboard() {
 }
 
 const styles: any = {
-  card: { background: '#fff', padding: 12, borderRadius: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
+  card: { background: '#fff', padding: 12, borderRadius: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', marginBottom: 10 },
   cardHeaderToggle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
   input: { width: '100%', padding: 10, marginBottom: 8, boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: 4 },
   btn: { width: '100%', padding: 10, border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' },
+  btnBlue: { width: '100%', padding: 10, border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', backgroundColor: '#007bff', color: 'white' },
+  btnFinalizar: { width: '100%', padding: 12, border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', backgroundColor: '#28a745', color: 'white', marginTop: 10 },
   btnSmall: { padding: '4px 8px', fontSize: 10, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4, background: '#fff' },
   overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modal: { background: 'white', padding: '20px', borderRadius: 12, width: '350px' },
+  modal: { background: 'white', padding: '20px', borderRadius: 12, width: '350px', maxHeight: '90vh', overflowY: 'auto' },
   btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer' }
 };
