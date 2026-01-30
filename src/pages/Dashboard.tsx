@@ -510,17 +510,35 @@ export default function Dashboard() {
 
       {modalHistorico && (
         <div style={styles.overlay}>
-          <div style={{ ...styles.modal, width: '450px' }}>
+          <div style={{ ...styles.modal, width: '650px' }}>
             <h3>Histórico de {mesFiltroHistorico}</h3>
-            <input type="month" value={mesFiltroHistorico} onChange={e => setMesFiltroHistorico(e.target.value)} style={styles.input} />
+            <input
+              type="month"
+              value={mesFiltroHistorico}
+              onChange={e => setMesFiltroHistorico(e.target.value)}
+              style={styles.input}
+            />
             <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
               {movimentacoesFiltradas.map((m, i) => (
                 <div key={i} style={{ fontSize: 12, padding: '8px 0', borderBottom: '1px solid #333' }}>
-                  <strong>{m.data}</strong>: {m.descricao} <span style={{ float: 'right', color: m.valor > 0 ? '#4caf50' : '#f44336' }}>R$ {m.valor.toFixed(2)}</span>
+                  <strong>{m.data}</strong>: {m.descricao}
+                  {/* Adicionando a conta aqui */}
+                  <span style={{ marginLeft: '10px', color: '#888', fontStyle: 'italic' }}>
+                    ({contas.find(c => c.id === m.contaId)?.nome || 'Conta não encontrada'})
+                  </span>
+
+                  <span style={{ float: 'right', color: m.valor > 0 ? '#4caf50' : '#f44336', fontWeight: 'bold' }}>
+                    R$ {m.valor.toFixed(2)}
+                  </span>
                 </div>
               ))}
             </div>
-            <button onClick={() => setModalHistorico(false)} style={{ ...styles.btn, marginTop: 15, backgroundColor: '#444', color: '#fff' }}>Fechar</button>
+            <button
+              onClick={() => setModalHistorico(false)}
+              style={{ ...styles.btn, marginTop: 15, backgroundColor: '#444', color: '#fff' }}
+            >
+              Fechar
+            </button>
           </div>
         </div>
       )}
