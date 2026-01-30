@@ -276,7 +276,7 @@ export default function Dashboard() {
           </div>
           {cardsExpandidos.entrada && (
             <div style={{ marginTop: 10 }}>
-              <input type="number" placeholder="R$" value={valorEntrada || ""} onChange={e => setValorEntrada(Number(e.target.value))} style={styles.input} />
+              <input type="float" placeholder="R$" value={valorEntrada || ""} onChange={e => setValorEntrada(Number(e.target.value))} style={styles.input} />
               <input type="text" placeholder="Descrição" value={descricaoEntrada} onChange={e => setDescricaoEntrada(e.target.value)} style={styles.input} />
               <select value={contaEntradaId} onChange={e => setContaEntradaId(e.target.value)} style={styles.input}>
                 {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -293,7 +293,7 @@ export default function Dashboard() {
           </div>
           {cardsExpandidos.saida && (
             <div style={{ marginTop: 10 }}>
-              <input type="number" placeholder="R$" value={valorSaida || ""} onChange={e => setValorSaida(Number(e.target.value))} style={styles.input} />
+              <input type="float" placeholder="R$" value={valorSaida || ""} onChange={e => setValorSaida(Number(e.target.value))} style={styles.input} />
               <input type="text" placeholder="Descrição" value={descricaoSaida} onChange={e => setDescricaoSaida(e.target.value)} style={styles.input} />
               <select value={contaSaidaId} onChange={e => setContaSaidaId(e.target.value)} style={styles.input}>
                 {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -311,10 +311,10 @@ export default function Dashboard() {
           {cardsExpandidos.compra && (
             <div style={{ marginTop: 10 }}>
               <input type="text" placeholder="Item" value={compraNome} onChange={e => setCompraNome(e.target.value)} style={styles.input} />
-              <input type="number" placeholder="Total R$" value={compraValorTotal || ""} onChange={e => setCompraValorTotal(Number(e.target.value))} style={styles.input} />
+              <input type="float" placeholder="Total R$" value={compraValorTotal || ""} onChange={e => setCompraValorTotal(Number(e.target.value))} style={styles.input} />
               <div style={{ display: 'flex', gap: 5 }}>
-                <input type="number" placeholder="Parc." value={compraParcelas || ""} onChange={e => setCompraParcelas(Number(e.target.value))} style={styles.input} />
-                <input type="number" placeholder="Juros %" value={compraJuros || ""} onChange={e => setCompraJuros(Number(e.target.value))} style={styles.input} />
+                <input type="float" placeholder="Parc." value={compraParcelas || ""} onChange={e => setCompraParcelas(Number(e.target.value))} style={styles.input} />
+                <input type="float" placeholder="Juros %" value={compraJuros || ""} onChange={e => setCompraJuros(Number(e.target.value))} style={styles.input} />
               </div>
               <input type="month" value={compraDataInicio} onChange={e => setCompraDataInicio(e.target.value)} style={styles.input} />
               <select value={compraContaId} onChange={e => setCompraContaId(e.target.value)} style={styles.input}>
@@ -453,7 +453,7 @@ export default function Dashboard() {
             <div style={{ ...styles.card, background: 'transparent', boxShadow: 'none' }}>
               <h2 style={{ marginTop: 0 }}>Nova Conta</h2>
               <input type="text" placeholder="Nome (Ex: Nubank)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
-              <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} style={styles.input} />
+              <input type="float" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} style={styles.input} />
               <input type="text" placeholder="Chave PIX (Opcional)" value={novaChavePix} onChange={(e) => setNovaChavePix(e.target.value)} style={styles.input} />
               <label style={{ display: "block", marginBottom: "10px" }}>
                 <input type="checkbox" checked={novoTemParcelamentos} onChange={(e) => setNovoTemParcelamentos(e.target.checked)} /> Tem parcelamentos/faturas?
@@ -473,11 +473,11 @@ export default function Dashboard() {
                     {modoSetup === "compra" ? (
                       <div>
                         <input type="text" placeholder="Produto/Loja" value={setupCompraNome} onChange={e => setSetupCompraNome(e.target.value)} style={styles.input} />
-                        <input type="number" placeholder="Valor Total" value={setupValorTotal || ""} onChange={e => setSetupValorTotal(Number(e.target.value))} style={styles.input} />
-                        <input type="number" placeholder="Juros %" value={setupJuros || ""} onChange={e => setSetupJuros(Number(e.target.value))} style={styles.input} />
+                        <input type="float" placeholder="Valor Total" value={setupValorTotal || ""} onChange={e => setSetupValorTotal(Number(e.target.value))} style={styles.input} />
+                        <input type="float" placeholder="Juros %" value={setupJuros || ""} onChange={e => setSetupJuros(Number(e.target.value))} style={styles.input} />
                         <div style={{ display: "flex", gap: 10 }}>
-                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Total Parc.</label><input type="number" value={setupQtdParc} onChange={e => setSetupQtdParc(Number(e.target.value))} style={styles.input} /></div>
-                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Já pagas</label><input type="number" value={setupParcPagas} onChange={e => setSetupParcPagas(Number(e.target.value))} style={styles.input} /></div>
+                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Total Parc.</label><input type="float" value={setupQtdParc} onChange={e => setSetupQtdParc(Number(e.target.value))} style={styles.input} /></div>
+                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Já pagas</label><input type="float" value={setupParcPagas} onChange={e => setSetupParcPagas(Number(e.target.value))} style={styles.input} /></div>
                         </div>
                         <label style={{ fontSize: 10 }}>Vencimento da Próxima</label>
                         <input type="date" value={setupDataParc} onChange={e => setSetupDataParc(e.target.value)} style={styles.input} />
@@ -486,7 +486,7 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <div>
-                        <input type="number" placeholder="Valor Total Fatura" value={setupValFat || ""} onChange={e => setSetupValFat(Number(e.target.value))} style={styles.input} />
+                        <input type="float" placeholder="Valor Total Fatura" value={setupValFat || ""} onChange={e => setSetupValFat(Number(e.target.value))} style={styles.input} />
                         <input type="date" value={setupDatFat} onChange={e => setSetupDatFat(e.target.value)} style={styles.input} />
                         <button onClick={incluirFaturaNoSetup} style={styles.btnBlue}>+ Adicionar à Lista</button>
                         <small>{faturasTemporarias.length} faturas na fila</small>
