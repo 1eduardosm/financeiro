@@ -192,7 +192,7 @@ export default function Setup() {
   const contaAtual = contaAtualIndex !== null ? contas[contaAtualIndex] : null;
 
   return (
-    <div style={{ maxWidth: "600px", margin: "40px auto", padding: "20px", fontFamily: "sans-serif" }}>
+    <div style={{ maxWidth: "600px", margin: "40px auto", padding: "20px", fontFamily: "sans-serif", color: 'white' }}>
       <h1>Configuração Inicial</h1>
 
       <div style={styles.card}>
@@ -268,9 +268,9 @@ export default function Setup() {
 }
 
 const styles: any = {
-  card: { border: "1px solid #ddd", padding: "15px", borderRadius: "8px", marginBottom: "20px", background: "#fff" },
+  card: { border: "1px solid #2c2c2c", padding: "15px", borderRadius: "8px", marginBottom: "20px", background: "#2c2c2c" },
   input: { width: "100%", padding: "10px", marginBottom: "10px", boxSizing: "border-box", borderRadius: "4px", border: "1px solid #ccc" },
   btn: { padding: "10px", cursor: "pointer", flex: 1 },
-  btnBlue: { width: "100%", padding: "10px", background: "#007bff", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" },
-  btnFinalizar: { width: "100%", padding: "15px", background: "#28a745", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "16px", fontWeight: "bold" }
+  btnBlue: { width: "100%", padding: "10px", background: "#1e7e34", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" },
+  btnFinalizar: { width: "100%", padding: "15px", background: "#1e7e34", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "16px", fontWeight: "bold" }
 };

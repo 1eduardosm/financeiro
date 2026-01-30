@@ -100,7 +100,7 @@ export default function Login() {
             disabled={carregando}
             style={{
               ...styles.button,
-              backgroundColor: carregando ? "#ccc" : "#860204"
+              backgroundColor: carregando ? "#fff" : "#a10104"
             }}
           >
             {carregando ? "Aguarde..." : modo === "login" ? "Entrar" : "Registrar"}
@@ -113,8 +113,8 @@ export default function Login() {
             style={styles.switchButton}
           >
             {modo === "login" 
-              ? "Não tem uma conta? Registre-se" 
-              : "Já possui conta? Faça login"}
+              ? "Registre-se" 
+              : "Faça login"}
           </button>
         </div>
       </div>
@@ -129,11 +129,11 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
     height: "100vh",
-    backgroundColor: "#f4f4f4",
+    backgroundColor: "#121212",
     fontFamily: "Arial, sans-serif"
   } as React.CSSProperties,
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: "#2c2c2c",
     padding: "40px",
     borderRadius: "8px",
     boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
@@ -142,7 +142,7 @@ const styles = {
   } as React.CSSProperties,
   title: {
     textAlign: "center" as const,
-    color: "#333",
+    color: "#ffffff",
     marginBottom: "30px"
   },
   input: {
@@ -172,9 +172,9 @@ const styles = {
   switchButton: {
     background: "none",
     border: "none",
-    color: "#860204",
+    color: "#ff0004",
     textDecoration: "underline",
     cursor: "pointer",
-    fontSize: "14px"
+    fontSize: "16px"
   }
 };
