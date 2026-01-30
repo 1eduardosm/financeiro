@@ -255,6 +255,14 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto", backgroundColor: "#121212", minHeight: "100vh", color: "#e0e0e0" }}>
+  
+  {/* CSS Global para esconder barras no Chrome, Safari e Edge */}
+  <style>
+    {`
+      *::-webkit-scrollbar { display: none !important; }
+    `}
+  </style>
+      
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #860204', marginBottom: 20, paddingBottom: 10 }}>
         <h2 style={{ margin: 0, color: "#fff" }}>Financeiro</h2>
         <button onClick={() => signOut(auth)} style={styles.btnLogout}>Sair</button>
@@ -352,7 +360,21 @@ export default function Dashboard() {
 
         {/* --- LISTA DE RECENTES --- */}
         <h5 style={{ margin: '0 0 10px 0', fontSize: 12, color: '#aaa', textTransform: 'uppercase' }}>Recentes</h5>
-        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+        <div
+          className="no-scroll"
+          style={{
+            maxHeight: '200px',
+            overflowY: 'auto',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none'
+          }}
+        >
+          <style>
+            {`
+      .no-scroll::-webkit-scrollbar { display: none; }
+    `}
+          </style>
+
           {entradas.length === 0 ? (
             <p style={{ fontSize: 12, color: '#777' }}>Nenhuma movimentação ainda.</p>
           ) : (
@@ -363,7 +385,9 @@ export default function Dashboard() {
                     {m.valor > 0 ? '↑' : '↓'}
                   </span>
                   {m.descricao || (m.valor > 0 ? 'Entrada' : 'Saída')}
-                  <small style={{ display: 'block', color: '#777', fontSize: 10 }}>{m.data} • {m.contaId}</small>
+                  <small style={{ display: 'block', color: '#777', fontSize: 10 }}>
+                    {m.data} • {contas.find(c => c.id === m.contaId)?.nome || 'Conta não encontrada'}
+                  </small>
                 </span>
                 <span style={{ fontWeight: 'bold' }}>R$ {Math.abs(m.valor).toFixed(2)}</span>
               </div>
@@ -510,6 +534,13 @@ export default function Dashboard() {
 
       {modalHistorico && (
         <div style={styles.overlay}>
+          {/* Injeção rápida de CSS para esconder a scrollbar no Chrome/Webkit */}
+          <style>
+            {`
+      .no-scroll::-webkit-scrollbar { display: none; }
+    `}
+          </style>
+
           <div style={{ ...styles.modal, width: '650px' }}>
             <h3>Histórico de {mesFiltroHistorico}</h3>
             <input
@@ -518,11 +549,21 @@ export default function Dashboard() {
               onChange={e => setMesFiltroHistorico(e.target.value)}
               style={styles.input}
             />
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+
+            {/* Div de rolagem com classe para Chrome e inline-style para Firefox/IE */}
+            <div
+              className="no-scroll"
+              style={{
+                maxHeight: '300px',
+                overflowY: 'auto',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}
+            >
               {movimentacoesFiltradas.map((m, i) => (
                 <div key={i} style={{ fontSize: 12, padding: '8px 0', borderBottom: '1px solid #333' }}>
                   <strong>{m.data}</strong>: {m.descricao}
-                  {/* Adicionando a conta aqui */}
+
                   <span style={{ marginLeft: '10px', color: '#888', fontStyle: 'italic' }}>
                     ({contas.find(c => c.id === m.contaId)?.nome || 'Conta não encontrada'})
                   </span>
@@ -533,6 +574,7 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+
             <button
               onClick={() => setModalHistorico(false)}
               style={{ ...styles.btn, marginTop: 15, backgroundColor: '#444', color: '#fff' }}
