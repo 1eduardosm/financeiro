@@ -92,6 +92,16 @@ export default function Dashboard() {
     carregar();
   }, [uid]);
 
+  const totalEntradas = entradas
+    .filter(m => m.valor > 0)
+    .reduce((acc, m) => acc + m.valor, 0);
+
+  const totalSaidas = entradas
+    .filter(m => m.valor < 0)
+    .reduce((acc, m) => acc + Math.abs(m.valor), 0);
+
+  const saldoTotal = totalEntradas - totalSaidas;
+
   const atualizarFirebase = async (nContas: any[], nEntradas: any[]) => {
     if (!uid) return;
     const save = nContas.map(({ id, ...rest }) => rest);
@@ -309,22 +319,56 @@ export default function Dashboard() {
       </div>
 
       <div style={{ ...styles.card, marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <h4 style={{ margin: 0 }}>Atividade Recente</h4>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+          <h4 style={{ margin: 0 }}>Resumo e Atividade</h4>
           <button onClick={() => setModalHistorico(true)} style={styles.btnSmall}>Explorar por Mês</button>
         </div>
+
+        {/* --- SEÇÃO DE TOTAIS --- */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '10px',
+          marginBottom: 20,
+          padding: '10px',
+          backgroundColor: 'rgba(255,255,255,0.05)',
+          borderRadius: '8px'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <small style={{ color: '#777', display: 'block' }}>Entradas</small>
+            <span style={{ color: '#00ff08', fontWeight: 'bold', fontSize: 14 }}>R$ {totalEntradas.toFixed(2)}</span>
+          </div>
+          <div style={{ textAlign: 'center', borderLeft: '1px solid #333', borderRight: '1px solid #333' }}>
+            <small style={{ color: '#777', display: 'block' }}>Saídas</small>
+            <span style={{ color: '#ff1100', fontWeight: 'bold', fontSize: 14 }}>R$ {totalSaidas.toFixed(2)}</span>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <small style={{ color: '#777', display: 'block' }}>Saldo</small>
+            <span style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>R$ {saldoTotal.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <hr style={{ borderColor: '#333', marginBottom: 15 }} />
+
+        {/* --- LISTA DE RECENTES --- */}
+        <h5 style={{ margin: '0 0 10px 0', fontSize: 12, color: '#aaa', textTransform: 'uppercase' }}>Recentes</h5>
         <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-          {entradas.length === 0 ? <p style={{ fontSize: 12, color: '#777' }}>Nenhuma movimentação ainda.</p> :
+          {entradas.length === 0 ? (
+            <p style={{ fontSize: 12, color: '#777' }}>Nenhuma movimentação ainda.</p>
+          ) : (
             entradas.slice(0, 10).map((m, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #333', fontSize: 13 }}>
                 <span>
-                  <span style={{ color: m.valor > 0 ? '#00ff08' : '#ff1100', fontWeight: 'bold', marginRight: 8 }}>{m.valor > 0 ? '↑' : '↓'}</span>
+                  <span style={{ color: m.valor > 0 ? '#00ff08' : '#ff1100', fontWeight: 'bold', marginRight: 8 }}>
+                    {m.valor > 0 ? '↑' : '↓'}
+                  </span>
                   {m.descricao || (m.valor > 0 ? 'Entrada' : 'Saída')}
                   <small style={{ display: 'block', color: '#777', fontSize: 10 }}>{m.data} • {m.contaId}</small>
                 </span>
                 <span style={{ fontWeight: 'bold' }}>R$ {Math.abs(m.valor).toFixed(2)}</span>
               </div>
-            ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -382,7 +426,7 @@ export default function Dashboard() {
       {modalNovaConta && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, width: '90%', maxWidth: '450px' }}>
-            <div style={{...styles.card, background: 'transparent', boxShadow: 'none'}}>
+            <div style={{ ...styles.card, background: 'transparent', boxShadow: 'none' }}>
               <h2 style={{ marginTop: 0 }}>Nova Conta</h2>
               <input type="text" placeholder="Nome (Ex: Nubank)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
               <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} style={styles.input} />
@@ -392,7 +436,7 @@ export default function Dashboard() {
               </label>
             </div>
             {novoTemParcelamentos && (
-              <div style={{...styles.card, background: '#2a2a2a'}}>
+              <div style={{ ...styles.card, background: '#2a2a2a' }}>
                 <h3>Lançamentos Iniciais</h3>
                 {!modoSetup ? (
                   <div style={{ display: "flex", gap: "10px" }}>
