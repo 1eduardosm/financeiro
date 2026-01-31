@@ -193,12 +193,30 @@ export default function Setup() {
 
   return (
     <div style={{ maxWidth: "600px", margin: "40px auto", padding: "20px", fontFamily: "sans-serif", color: 'white' }}>
+  {/* CSS Global para esconder barras no Chrome, Safari e Edge */}
+  <style>
+    {`
+      /* Oculta barras de rolagem (Chrome, Safari, Edge, Firefox) */
+      *::-webkit-scrollbar { display: none !important; }
+      * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+
+      /* Remove as setas de rolagem (spinners) dos campos de número */
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type=number] {
+        -moz-appearance: textfield; /* Firefox */
+      }
+    `}
+  </style>    
       <h1>Configuração Inicial</h1>
 
       <div style={styles.card}>
         <h2>1. Adicionar Conta</h2>
         <input type="text" placeholder="Nome (Ex: Nubank)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
-        <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} style={styles.input} />
+        <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
         <input type="text" placeholder="Chave PIX (Opcional)" value={novaChavePix} onChange={(e) => setNovaChavePix(e.target.value)} style={styles.input} />
         
         <label style={{ display: "block", marginBottom: "10px" }}>
@@ -231,11 +249,11 @@ export default function Setup() {
               {contaAtual.modo === "compra" ? (
                 <div>
                   <input type="text" placeholder="Produto/Loja" value={novaCompraNome} onChange={e => setNovaCompraNome(e.target.value)} style={styles.input} />
-                  <input type="number" placeholder="Valor Total da Compra" value={valorTotalCompra || ""} onChange={e => setValorTotalCompra(Number(e.target.value))} style={styles.input} />
-                  <input type="number" placeholder="Juros Total %" value={jurosPorcento || ""} onChange={e => setJurosPorcento(Number(e.target.value))} style={styles.input} />
+                  <input type="number" placeholder="Valor Total da Compra" value={valorTotalCompra || ""} onChange={e => setValorTotalCompra(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
+                  <input type="number" placeholder="Juros Total %" value={jurosPorcento || ""} onChange={e => setJurosPorcento(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
                   <div style={{ display: "flex", gap: 10 }}>
-                    <div style={{flex: 1}}><label style={{fontSize: 12}}>Total Parcelas</label><input type="number" value={qtdParcelas} onChange={e => setQtdParcelas(Number(e.target.value))} style={styles.input} /></div>
-                    <div style={{flex: 1}}><label style={{fontSize: 12}}>Já pagas</label><input type="number" value={parcelasPagas} onChange={e => setParcelasPagas(Number(e.target.value))} style={styles.input} /></div>
+                    <div style={{flex: 1}}><label style={{fontSize: 12}}>Total Parcelas</label><input type="number" value={qtdParcelas} onChange={e => setQtdParcelas(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} /></div>
+                    <div style={{flex: 1}}><label style={{fontSize: 12}}>Já pagas</label><input type="number" value={parcelasPagas} onChange={e => setParcelasPagas(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} /></div>
                   </div>
                   <label style={{fontSize: 12}}>Vencimento da Próxima Parcela</label>
                   <input type="date" value={novaDataParcela} onChange={e => setNovaDataParcela(e.target.value)} style={styles.input} />
@@ -249,7 +267,7 @@ export default function Setup() {
                 </div>
               ) : (
                 <div>
-                  <input type="number" placeholder="Valor Total Fatura" value={novoValorFatura || ""} onChange={e => setNovoValorFatura(Number(e.target.value))} style={styles.input} />
+                  <input type="number" placeholder="Valor Total Fatura" value={novoValorFatura || ""} onChange={e => setNovoValorFatura(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
                   <input type="date" value={novaDataFatura} onChange={e => setNovaDataFatura(e.target.value)} style={styles.input} />
                   <button onClick={adicionarFatura} style={styles.btnBlue}>Add Fatura</button>
                   <ul>{contaAtual.faturas?.map((f, i) => <li key={i}>R$ {f.valor} - {f.vencimento}</li>)}</ul>
