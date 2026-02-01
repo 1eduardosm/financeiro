@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { db, auth } from "../firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
@@ -92,32 +92,29 @@ export default function Dashboard() {
     carregar();
   }, [uid]);
 
-  // --- NOVA LÓGICA DE VALIDAÇÃO DE MÊS ---
-  const agora = new Date();
-  const mesAtual = agora.getMonth();
-  const anoAtual = agora.getFullYear();
+  // --- LÓGICA DE FILTRAGEM COM useMemo PARA ATUALIZAÇÃO EM TEMPO REAL ---
+  const { movimentacoesDoMes, totalEntradas, totalSaidas, saldoTotal } = useMemo(() => {
+    const agora = new Date();
+    const mesAnoAtual = agora.toISOString().slice(0, 7); // Ex: "2024-05"
 
-  const movimentacoesDoMes = entradas.filter(m => {
-    let dM;
-    if (typeof m.data === 'string' && m.data.includes('/')) {
-      const [dia, mes, ano] = m.data.split('/');
-      dM = new Date(Number(ano), Number(mes) - 1, Number(dia));
-    } else {
-      dM = new Date(m.data);
-    }
-    return dM.getMonth() === mesAtual && dM.getFullYear() === anoAtual;
-  });
+    const filtradas = entradas.filter(m => {
+      if (typeof m.data === 'string' && m.data.includes('/')) {
+        const [, mes, ano] = m.data.split('/');
+        return `${ano}-${mes}` === mesAnoAtual;
+      }
+      return m.data.startsWith(mesAnoAtual);
+    });
 
-  const totalEntradas = movimentacoesDoMes
-    .filter(m => m.valor > 0)
-    .reduce((acc, m) => acc + m.valor, 0);
+    const ent = filtradas.filter(m => m.valor > 0).reduce((acc, m) => acc + m.valor, 0);
+    const sai = filtradas.filter(m => m.valor < 0).reduce((acc, m) => acc + Math.abs(m.valor), 0);
 
-  const totalSaidas = movimentacoesDoMes
-    .filter(m => m.valor < 0)
-    .reduce((acc, m) => acc + Math.abs(m.valor), 0);
-
-  const saldoTotal = totalEntradas - totalSaidas;
-  // ---------------------------------------
+    return {
+      movimentacoesDoMes: filtradas,
+      totalEntradas: ent,
+      totalSaidas: sai,
+      saldoTotal: ent - sai
+    };
+  }, [entradas]);
 
   const atualizarFirebase = async (nContas: any[], nEntradas: any[]) => {
     if (!uid) return;
@@ -251,10 +248,6 @@ export default function Dashboard() {
     setPagamentoFatura(null); setFontesDePagamento([]);
   };
 
-  const movimentacoesFiltradas = entradas.filter(m => m.data.startsWith(mesFiltroHistorico));
-
-  if (loading) return <div style={{ padding: 20, backgroundColor: '#121212', color: '#fff', height: '100vh' }}>Carregando...</div>;
-
   const gerenciarPix = async (index: number, novaChave: string | null) => {
     const nContas = [...contas];
     const chaveLimpa = novaChave ? novaChave.trim() : "";
@@ -269,6 +262,21 @@ export default function Dashboard() {
     navigator.clipboard.writeText(chave);
     alert("Chave PIX copiada!");
   };
+
+  const styles: any = {
+    overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+    modal: { backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', position: 'relative' },
+    card: { backgroundColor: '#1e1e1e', padding: '15px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' },
+    cardHeaderToggle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
+    input: { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #333', backgroundColor: '#2a2a2a', color: '#fff', boxSizing: 'border-box' },
+    btn: { width: '100%', padding: '10px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
+    btnSmall: { padding: '5px 10px', fontSize: '11px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#2a2a2a', color: '#ccc', cursor: 'pointer' },
+    btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' },
+    btnBlue: { backgroundColor: '#007bff', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', width: '100%', marginBottom: 10 },
+    btnFinalizar: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '12px', borderRadius: '5px', width: '100%', fontWeight: 'bold', marginTop: 10 }
+  };
+
+  if (loading) return <div style={{ padding: 20, backgroundColor: '#121212', color: '#fff', height: '100vh' }}>Carregando...</div>;
 
   return (
     <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto", backgroundColor: "#121212", minHeight: "100vh", color: "#e0e0e0" }}>
@@ -351,15 +359,7 @@ export default function Dashboard() {
           <button onClick={() => setModalHistorico(true)} style={styles.btnSmall}>Explorar por Mês</button>
         </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          gap: '10px',
-          marginBottom: 20,
-          padding: '10px',
-          backgroundColor: 'rgba(255,255,255,0.05)',
-          borderRadius: '8px'
-        }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: 20, padding: '10px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
           <div style={{ textAlign: 'center' }}>
             <small style={{ color: '#777', display: 'block' }}>Entradas</small>
             <span style={{ color: '#00ff08', fontWeight: 'bold', fontSize: 14 }}>R$ {totalEntradas.toFixed(2)}</span>
@@ -384,13 +384,9 @@ export default function Dashboard() {
             movimentacoesDoMes.slice(0, 10).map((m, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #333', fontSize: 13 }}>
                 <span>
-                  <span style={{ color: m.valor > 0 ? '#00ff08' : '#ff1100', fontWeight: 'bold', marginRight: 8 }}>
-                    {m.valor > 0 ? '↑' : '↓'}
-                  </span>
+                  <span style={{ color: m.valor > 0 ? '#00ff08' : '#ff1100', fontWeight: 'bold', marginRight: 8 }}>{m.valor > 0 ? '↑' : '↓'}</span>
                   {m.descricao || (m.valor > 0 ? 'Entrada' : 'Saída')}
-                  <small style={{ display: 'block', color: '#777', fontSize: 10 }}>
-                    {m.data} • {contas.find(c => c.id === m.contaId)?.nome || 'Conta não encontrada'}
-                  </small>
+                  <small style={{ display: 'block', color: '#777', fontSize: 10 }}>{m.data} • {contas.find(c => c.id === m.contaId)?.nome}</small>
                 </span>
                 <span style={{ fontWeight: 'bold' }}>R$ {Math.abs(m.valor).toFixed(2)}</span>
               </div>
@@ -450,7 +446,7 @@ export default function Dashboard() {
         + Adicionar Nova Conta
       </button>
 
-      {/* --- MODAIS MANTIDOS INTEGRALMENTE --- */}
+      {/* --- MODAIS --- */}
       {modalNovaConta && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, width: '90%', maxWidth: '450px' }}>
@@ -501,6 +497,39 @@ export default function Dashboard() {
         </div>
       )}
 
+      {pagamentoFatura && (
+        <div style={styles.overlay}>
+          <div style={{ ...styles.modal, width: '450px' }}>
+            <h3>Abater Valor</h3>
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ fontSize: 12, display: 'block' }}>Fonte de Pagamento:</label>
+              <select value={novoTipo} onChange={e => setNovoTipo(e.target.value as any)} style={styles.input}>
+                <option value="saldo">Saldo de uma Conta</option>
+                <option value="terceiros">Dinheiro Externo / Terceiros</option>
+              </select>
+              {novoTipo === 'saldo' ? (
+                <select value={novaContaOrigemId} onChange={e => setNovaContaOrigemId(e.target.value)} style={styles.input}>
+                  {contas.map(c => <option key={c.id} value={c.id}>{c.nome} (Saldo: R$ {c.saldo.toFixed(2)})</option>)}
+                </select>
+              ) : (
+                <input type="text" placeholder="Quem pagou? (Ex: Mãe)" value={novaDescricao} onChange={e => setNovaDescricao(e.target.value)} style={styles.input} />
+              )}
+              <input type="number" placeholder="R$ Valor a abater" value={novoValor || ""} onChange={e => setNovoValor(Number(e.target.value))} style={styles.input} />
+              <button onClick={() => {
+                if (novoValor <= 0) return;
+                setFontesDePagamento([...fontesDePagamento, { valor: novoValor, tipo: novoTipo, contaOrigemId: novaContaOrigemId, descricao: novaDescricao }]);
+                setNovoValor(0); setNovaDescricao("");
+              }} style={styles.btnBlue}>+ Adicionar Pagamento</button>
+            </div>
+            <div style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: 15, background: '#000', padding: 10, borderRadius: 5 }}>
+              {fontesDePagamento.map((f, i) => <div key={i} style={{ fontSize: 12 }}>R$ {f.valor.toFixed(2)} - {f.tipo === 'saldo' ? f.contaOrigemId : f.descricao}</div>)}
+            </div>
+            <button onClick={processarPagamento} style={styles.btnFinalizar}>Confirmar Abatimento</button>
+            <button onClick={() => setPagamentoFatura(null)} style={{ ...styles.btn, marginTop: 10, backgroundColor: '#444' }}>Fechar</button>
+          </div>
+        </div>
+      )}
+
       {verDetalhes && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, width: '400px' }}>
@@ -515,7 +544,7 @@ export default function Dashboard() {
                   </div>
                 ))}
             </div>
-            <button onClick={() => setVerDetalhes(null)} style={{ ...styles.btn, marginTop: 15, backgroundColor: '#444', color: 'white' }}>Fechar</button>
+            <button onClick={() => setVerDetalhes(null)} style={{ ...styles.btn, marginTop: 15, backgroundColor: '#444' }}>Fechar</button>
           </div>
         </div>
       )}
@@ -524,102 +553,52 @@ export default function Dashboard() {
         <div style={styles.overlay}>
           <div style={styles.modal}>
             <h3>Gerenciar Chave PIX</h3>
-            <input type="text" value={editPixInfo.chave} onChange={e => setEditPixInfo({ ...editPixInfo, chave: e.target.value })} style={styles.input} placeholder="Nova chave PIX" />
+            <input type="text" value={editPixInfo.chave} onChange={e => setEditPixInfo({ ...editPixInfo, chave: e.target.value })} style={styles.input} />
             <button onClick={() => gerenciarPix(editPixInfo.index, editPixInfo.chave)} style={{ ...styles.btn, backgroundColor: '#28a745', color: 'white', marginBottom: 5 }}>Salvar</button>
-            <button onClick={() => setEditPixInfo(null)} style={{ ...styles.btn, backgroundColor: '#444', color: 'white' }}>Cancelar</button>
+            <button onClick={() => setEditPixInfo(null)} style={{ ...styles.btn, backgroundColor: '#444' }}>Cancelar</button>
           </div>
         </div>
       )}
 
       {modalHistorico && (() => {
-        // Lógica de cálculo específica para o histórico dentro do modal
         const movHistorico = entradas.filter(m => m.data.startsWith(mesFiltroHistorico));
-
-        const entradasHist = movHistorico
-          .filter(m => m.valor > 0)
-          .reduce((acc, m) => acc + m.valor, 0);
-
-        const saidasHist = movHistorico
-          .filter(m => m.valor < 0)
-          .reduce((acc, m) => acc + Math.abs(m.valor), 0);
-
-        const saldoHist = entradasHist - saidasHist;
+        const entHist = movHistorico.filter(m => m.valor > 0).reduce((acc, m) => acc + m.valor, 0);
+        const saiHist = movHistorico.filter(m => m.valor < 0).reduce((acc, m) => acc + Math.abs(m.valor), 0);
+        const saldoHist = entHist - saiHist;
 
         return (
           <div style={styles.overlay}>
             <div style={{ ...styles.modal, width: '650px' }}>
               <h3 style={{ marginTop: 0 }}>Histórico de {mesFiltroHistorico}</h3>
-
-              <input
-                type="month"
-                value={mesFiltroHistorico}
-                onChange={e => setMesFiltroHistorico(e.target.value)}
-                style={styles.input}
-              />
-
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: '10px',
-                marginBottom: 20,
-                padding: '15px',
-                backgroundColor: 'rgba(255,255,255,0.05)',
-                borderRadius: '8px',
-                border: '1px solid #333'
-              }}>
+              <input type="month" value={mesFiltroHistorico} onChange={e => setMesFiltroHistorico(e.target.value)} style={styles.input} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: 20, padding: '15px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid #333' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <small style={{ color: '#777', display: 'block', marginBottom: 5 }}>Entradas</small>
-                  <span style={{ color: '#00ff08', fontWeight: 'bold', fontSize: 16 }}>
-                    R$ {entradasHist.toFixed(2)}
-                  </span>
+                  <small style={{ color: '#777', display: 'block' }}>Entradas</small>
+                  <span style={{ color: '#00ff08', fontWeight: 'bold' }}>R$ {entHist.toFixed(2)}</span>
                 </div>
                 <div style={{ textAlign: 'center', borderLeft: '1px solid #333', borderRight: '1px solid #333' }}>
-                  <small style={{ color: '#777', display: 'block', marginBottom: 5 }}>Saídas</small>
-                  <span style={{ color: '#ff1100', fontWeight: 'bold', fontSize: 16 }}>
-                    R$ {saidasHist.toFixed(2)}
-                  </span>
+                  <small style={{ color: '#777', display: 'block' }}>Saídas</small>
+                  <span style={{ color: '#ff1100', fontWeight: 'bold' }}>R$ {saiHist.toFixed(2)}</span>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <small style={{ color: '#777', display: 'block', marginBottom: 5 }}>Saldo Período</small>
-                  <span style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
-                    R$ {saldoHist.toFixed(2)}
-                  </span>
+                  <small style={{ color: '#777', display: 'block' }}>Saldo</small>
+                  <span style={{ color: '#fff', fontWeight: 'bold' }}>R$ {saldoHist.toFixed(2)}</span>
                 </div>
               </div>
-
-              <div className="no-scroll" style={{ maxHeight: '300px', overflowY: 'auto', borderTop: '1px solid #333' }}>
-                {movHistorico.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: '#777', marginTop: 20 }}>Nenhuma movimentação neste período.</p>
-                ) : (
-                  movHistorico.map((m, i) => (
-                    <div key={i} style={{ fontSize: 13, padding: '10px 0', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <strong style={{ color: '#aaa', marginRight: 10 }}>{m.data.split('-').reverse().join('/')}</strong>
-                        <span>{m.descricao || (m.valor > 0 ? 'Entrada' : 'Saída')}</span>
-                        <br />
-                        <small style={{ color: '#555' }}>
-                          {contas.find(c => c.id === m.contaId)?.nome || 'Conta não identificada'}
-                        </small>
-                      </div>
-                      <span style={{ color: m.valor > 0 ? '#00ff08' : '#ff1100', fontWeight: 'bold' }}>
-                        {m.valor > 0 ? '+' : '-'} R$ {Math.abs(m.valor).toFixed(2)}
-                      </span>
-                    </div>
-                  ))
-                )}
+              <div className="no-scroll" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {movHistorico.map((m, i) => (
+                  <div key={i} style={{ fontSize: 12, padding: '8px 0', borderBottom: '1px solid #333' }}>
+                    <strong>{m.data}</strong>: {m.descricao}
+                    <span style={{ marginLeft: '10px', color: '#888', fontStyle: 'italic' }}>({contas.find(c => c.id === m.contaId)?.nome})</span>
+                    <span style={{ float: 'right', color: m.valor > 0 ? '#4caf50' : '#f44336', fontWeight: 'bold' }}>R$ {m.valor.toFixed(2)}</span>
+                  </div>
+                ))}
               </div>
-
-              <button
-                onClick={() => setModalHistorico(false)}
-                style={{ ...styles.btn, marginTop: 20, backgroundColor: '#860204', color: '#fff' }}
-              >
-                Fechar Relatório
-              </button>
+              <button onClick={() => setModalHistorico(false)} style={{ ...styles.btn, marginTop: 15, backgroundColor: '#444' }}>Fechar</button>
             </div>
           </div>
         );
       })()}
-
     </div>
   );
 }
