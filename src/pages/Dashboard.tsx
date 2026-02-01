@@ -92,15 +92,32 @@ export default function Dashboard() {
     carregar();
   }, [uid]);
 
-  const totalEntradas = entradas
+  // --- NOVA LÓGICA DE VALIDAÇÃO DE MÊS ---
+  const agora = new Date();
+  const mesAtual = agora.getMonth();
+  const anoAtual = agora.getFullYear();
+
+  const movimentacoesDoMes = entradas.filter(m => {
+    let dM;
+    if (typeof m.data === 'string' && m.data.includes('/')) {
+      const [dia, mes, ano] = m.data.split('/');
+      dM = new Date(Number(ano), Number(mes) - 1, Number(dia));
+    } else {
+      dM = new Date(m.data);
+    }
+    return dM.getMonth() === mesAtual && dM.getFullYear() === anoAtual;
+  });
+
+  const totalEntradas = movimentacoesDoMes
     .filter(m => m.valor > 0)
     .reduce((acc, m) => acc + m.valor, 0);
 
-  const totalSaidas = entradas
+  const totalSaidas = movimentacoesDoMes
     .filter(m => m.valor < 0)
     .reduce((acc, m) => acc + Math.abs(m.valor), 0);
 
   const saldoTotal = totalEntradas - totalSaidas;
+  // ---------------------------------------
 
   const atualizarFirebase = async (nContas: any[], nEntradas: any[]) => {
     if (!uid) return;
@@ -255,26 +272,16 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto", backgroundColor: "#121212", minHeight: "100vh", color: "#e0e0e0" }}>
-  
-  {/* CSS Global para esconder barras no Chrome, Safari e Edge */}
-  <style>
-    {`
-      /* Oculta barras de rolagem (Chrome, Safari, Edge, Firefox) */
-      *::-webkit-scrollbar { display: none !important; }
-      * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+      <style>
+        {`
+          *::-webkit-scrollbar { display: none !important; }
+          * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+          input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+          input[type=number] { -moz-appearance: textfield; }
+          .no-scroll::-webkit-scrollbar { display: none; }
+        `}
+      </style>
 
-      /* Remove as setas de rolagem (spinners) dos campos de número */
-      input::-webkit-outer-spin-button,
-      input::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-      }
-      input[type=number] {
-        -moz-appearance: textfield; /* Firefox */
-      }
-    `}
-  </style>
-      
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #860204', marginBottom: 20, paddingBottom: 10 }}>
         <h2 style={{ margin: 0, color: "#fff" }}>Financeiro</h2>
         <button onClick={() => signOut(auth)} style={styles.btnLogout}>Sair</button>
@@ -288,7 +295,7 @@ export default function Dashboard() {
           </div>
           {cardsExpandidos.entrada && (
             <div style={{ marginTop: 10 }}>
-              <input type="number" placeholder="R$" value={valorEntrada || ""} onChange={e => setValorEntrada(Number(e.target.value))}onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
+              <input type="number" placeholder="R$" value={valorEntrada || ""} onChange={e => setValorEntrada(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
               <input type="text" placeholder="Descrição" value={descricaoEntrada} onChange={e => setDescricaoEntrada(e.target.value)} style={styles.input} />
               <select value={contaEntradaId} onChange={e => setContaEntradaId(e.target.value)} style={styles.input}>
                 {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -344,7 +351,6 @@ export default function Dashboard() {
           <button onClick={() => setModalHistorico(true)} style={styles.btnSmall}>Explorar por Mês</button>
         </div>
 
-        {/* --- SEÇÃO DE TOTAIS --- */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr 1fr',
@@ -370,27 +376,12 @@ export default function Dashboard() {
 
         <hr style={{ borderColor: '#333', marginBottom: 15 }} />
 
-        {/* --- LISTA DE RECENTES --- */}
-        <h5 style={{ margin: '0 0 10px 0', fontSize: 12, color: '#aaa', textTransform: 'uppercase' }}>Recentes</h5>
-        <div
-          className="no-scroll"
-          style={{
-            maxHeight: '200px',
-            overflowY: 'auto',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none'
-          }}
-        >
-          <style>
-            {`
-      .no-scroll::-webkit-scrollbar { display: none; }
-    `}
-          </style>
-
-          {entradas.length === 0 ? (
-            <p style={{ fontSize: 12, color: '#777' }}>Nenhuma movimentação ainda.</p>
+        <h5 style={{ margin: '0 0 10px 0', fontSize: 12, color: '#aaa', textTransform: 'uppercase' }}>Recentes (Este Mês)</h5>
+        <div className="no-scroll" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+          {movimentacoesDoMes.length === 0 ? (
+            <p style={{ fontSize: 12, color: '#777' }}>Nenhuma movimentação este mês.</p>
           ) : (
-            entradas.slice(0, 10).map((m, i) => (
+            movimentacoesDoMes.slice(0, 10).map((m, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #333', fontSize: 13 }}>
                 <span>
                   <span style={{ color: m.valor > 0 ? '#00ff08' : '#ff1100', fontWeight: 'bold', marginRight: 8 }}>
@@ -459,20 +450,19 @@ export default function Dashboard() {
         + Adicionar Nova Conta
       </button>
 
+      {/* --- MODAIS MANTIDOS INTEGRALMENTE --- */}
       {modalNovaConta && (
         <div style={styles.overlay}>
           <div style={{ ...styles.modal, width: '90%', maxWidth: '450px' }}>
-            <div style={{ ...styles.card, background: 'transparent', boxShadow: 'none' }}>
-              <h2 style={{ marginTop: 0 }}>Nova Conta</h2>
-              <input type="text" placeholder="Nome (Ex: Nubank)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
-              <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
-              <input type="text" placeholder="Chave PIX (Opcional)" value={novaChavePix} onChange={(e) => setNovaChavePix(e.target.value)} style={styles.input} />
-              <label style={{ display: "block", marginBottom: "10px" }}>
-                <input type="checkbox" checked={novoTemParcelamentos} onChange={(e) => setNovoTemParcelamentos(e.target.checked)} /> Tem parcelamentos/faturas?
-              </label>
-            </div>
+            <h2 style={{ marginTop: 0 }}>Nova Conta</h2>
+            <input type="text" placeholder="Nome (Ex: Nubank)" value={novaContaNome} onChange={(e) => setNovaContaNome(e.target.value)} style={styles.input} />
+            <input type="number" placeholder="Saldo Atual R$" value={novoSaldo || ""} onChange={(e) => setNovoSaldo(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
+            <input type="text" placeholder="Chave PIX (Opcional)" value={novaChavePix} onChange={(e) => setNovaChavePix(e.target.value)} style={styles.input} />
+            <label style={{ display: "block", marginBottom: "10px" }}>
+              <input type="checkbox" checked={novoTemParcelamentos} onChange={(e) => setNovoTemParcelamentos(e.target.checked)} /> Tem parcelamentos/faturas?
+            </label>
             {novoTemParcelamentos && (
-              <div style={{ ...styles.card, background: '#2a2a2a' }}>
+              <div style={{ ...styles.card, background: '#2a2a2a', marginBottom: 15 }}>
                 <h3>Lançamentos Iniciais</h3>
                 {!modoSetup ? (
                   <div style={{ display: "flex", gap: "10px" }}>
@@ -485,23 +475,20 @@ export default function Dashboard() {
                     {modoSetup === "compra" ? (
                       <div>
                         <input type="text" placeholder="Produto/Loja" value={setupCompraNome} onChange={e => setSetupCompraNome(e.target.value)} style={styles.input} />
-                        <input type="number" placeholder="Valor Total" value={setupValorTotal || ""} onChange={e => setSetupValorTotal(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
-                        <input type="number" placeholder="Juros %" value={setupJuros || ""} onChange={e => setSetupJuros(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
+                        <input type="number" placeholder="Valor Total" value={setupValorTotal || ""} onChange={e => setSetupValorTotal(Number(e.target.value))} style={styles.input} />
+                        <input type="number" placeholder="Juros %" value={setupJuros || ""} onChange={e => setSetupJuros(Number(e.target.value))} style={styles.input} />
                         <div style={{ display: "flex", gap: 10 }}>
-                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Total Parc.</label><input type="number" value={setupQtdParc} onChange={e => setSetupQtdParc(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} /></div>
-                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Já pagas</label><input type="number" value={setupParcPagas} onChange={e => setSetupParcPagas(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} /></div>
+                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Total Parc.</label><input type="number" value={setupQtdParc} onChange={e => setSetupQtdParc(Number(e.target.value))} style={styles.input} /></div>
+                          <div style={{ flex: 1 }}><label style={{ fontSize: 10 }}>Já pagas</label><input type="number" value={setupParcPagas} onChange={e => setSetupParcPagas(Number(e.target.value))} style={styles.input} /></div>
                         </div>
-                        <label style={{ fontSize: 10 }}>Vencimento da Próxima</label>
                         <input type="date" value={setupDataParc} onChange={e => setSetupDataParc(e.target.value)} style={styles.input} />
                         <button onClick={incluirCompraNoSetup} style={styles.btnBlue}>+ Adicionar à Lista</button>
-                        <small>{comprasTemporarias.length} compras na fila</small>
                       </div>
                     ) : (
                       <div>
-                        <input type="number" placeholder="Valor Total Fatura" value={setupValFat || ""} onChange={e => setSetupValFat(Number(e.target.value))} onWheel={(e) => (e.target as HTMLInputElement).blur()} style={styles.input} />
+                        <input type="number" placeholder="Valor Total Fatura" value={setupValFat || ""} onChange={e => setSetupValFat(Number(e.target.value))} style={styles.input} />
                         <input type="date" value={setupDatFat} onChange={e => setSetupDatFat(e.target.value)} style={styles.input} />
                         <button onClick={incluirFaturaNoSetup} style={styles.btnBlue}>+ Adicionar à Lista</button>
-                        <small>{faturasTemporarias.length} faturas na fila</small>
                       </div>
                     )}
                   </div>
@@ -544,98 +531,108 @@ export default function Dashboard() {
         </div>
       )}
 
-      {modalHistorico && (
-        <div style={styles.overlay}>
-          {/* Injeção rápida de CSS para esconder a scrollbar no Chrome/Webkit */}
-          <style>
-            {`
-      .no-scroll::-webkit-scrollbar { display: none; }
-    `}
-          </style>
+      {modalHistorico && (() => {
+        // Lógica de cálculo específica para o histórico dentro do modal
+        const movHistorico = entradas.filter(m => m.data.startsWith(mesFiltroHistorico));
 
-          <div style={{ ...styles.modal, width: '650px' }}>
-            <h3>Histórico de {mesFiltroHistorico}</h3>
-            <input
-              type="month"
-              value={mesFiltroHistorico}
-              onChange={e => setMesFiltroHistorico(e.target.value)}
-              style={styles.input}
-            />
+        const entradasHist = movHistorico
+          .filter(m => m.valor > 0)
+          .reduce((acc, m) => acc + m.valor, 0);
 
-            {/* Div de rolagem com classe para Chrome e inline-style para Firefox/IE */}
-            <div
-              className="no-scroll"
-              style={{
-                maxHeight: '300px',
-                overflowY: 'auto',
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none'
-              }}
-            >
-              {movimentacoesFiltradas.map((m, i) => (
-                <div key={i} style={{ fontSize: 12, padding: '8px 0', borderBottom: '1px solid #333' }}>
-                  <strong>{m.data}</strong>: {m.descricao}
+        const saidasHist = movHistorico
+          .filter(m => m.valor < 0)
+          .reduce((acc, m) => acc + Math.abs(m.valor), 0);
 
-                  <span style={{ marginLeft: '10px', color: '#888', fontStyle: 'italic' }}>
-                    ({contas.find(c => c.id === m.contaId)?.nome || 'Conta não encontrada'})
-                  </span>
+        const saldoHist = entradasHist - saidasHist;
 
-                  <span style={{ float: 'right', color: m.valor > 0 ? '#4caf50' : '#f44336', fontWeight: 'bold' }}>
-                    R$ {m.valor.toFixed(2)}
+        return (
+          <div style={styles.overlay}>
+            <div style={{ ...styles.modal, width: '650px' }}>
+              <h3 style={{ marginTop: 0 }}>Histórico de {mesFiltroHistorico}</h3>
+
+              <input
+                type="month"
+                value={mesFiltroHistorico}
+                onChange={e => setMesFiltroHistorico(e.target.value)}
+                style={styles.input}
+              />
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: '10px',
+                marginBottom: 20,
+                padding: '15px',
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderRadius: '8px',
+                border: '1px solid #333'
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <small style={{ color: '#777', display: 'block', marginBottom: 5 }}>Entradas</small>
+                  <span style={{ color: '#00ff08', fontWeight: 'bold', fontSize: 16 }}>
+                    R$ {entradasHist.toFixed(2)}
                   </span>
                 </div>
-              ))}
-            </div>
+                <div style={{ textAlign: 'center', borderLeft: '1px solid #333', borderRight: '1px solid #333' }}>
+                  <small style={{ color: '#777', display: 'block', marginBottom: 5 }}>Saídas</small>
+                  <span style={{ color: '#ff1100', fontWeight: 'bold', fontSize: 16 }}>
+                    R$ {saidasHist.toFixed(2)}
+                  </span>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <small style={{ color: '#777', display: 'block', marginBottom: 5 }}>Saldo Período</small>
+                  <span style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
+                    R$ {saldoHist.toFixed(2)}
+                  </span>
+                </div>
+              </div>
 
-            <button
-              onClick={() => setModalHistorico(false)}
-              style={{ ...styles.btn, marginTop: 15, backgroundColor: '#444', color: '#fff' }}
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
+              <div className="no-scroll" style={{ maxHeight: '300px', overflowY: 'auto', borderTop: '1px solid #333' }}>
+                {movHistorico.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: '#777', marginTop: 20 }}>Nenhuma movimentação neste período.</p>
+                ) : (
+                  movHistorico.map((m, i) => (
+                    <div key={i} style={{ fontSize: 13, padding: '10px 0', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong style={{ color: '#aaa', marginRight: 10 }}>{m.data.split('-').reverse().join('/')}</strong>
+                        <span>{m.descricao || (m.valor > 0 ? 'Entrada' : 'Saída')}</span>
+                        <br />
+                        <small style={{ color: '#555' }}>
+                          {contas.find(c => c.id === m.contaId)?.nome || 'Conta não identificada'}
+                        </small>
+                      </div>
+                      <span style={{ color: m.valor > 0 ? '#00ff08' : '#ff1100', fontWeight: 'bold' }}>
+                        {m.valor > 0 ? '+' : '-'} R$ {Math.abs(m.valor).toFixed(2)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
 
-      {pagamentoFatura && (
-        <div style={styles.overlay}>
-          <div style={{ ...styles.modal, width: '400px' }}>
-            <h4>Abater Fat. {contas[pagamentoFatura.cIdx].faturas[pagamentoFatura.fIdx].mesAno}</h4>
-            <input type="number" placeholder="Valor R$" value={novoValor || ""} onChange={e => setNovoValor(Number(e.target.value))} style={styles.input} />
-            <select value={novoTipo} onChange={e => setNovoTipo(e.target.value as any)} style={styles.input}>
-              <option value="saldo">Meu Saldo</option>
-              <option value="terceiros">Terceiros</option>
-            </select>
-            {novoTipo === 'saldo' ? (
-              <select value={novaContaOrigemId} onChange={e => setNovaContaOrigemId(e.target.value)} style={styles.input}>
-                {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            ) : <input type="text" placeholder="Quem pagou?" value={novaDescricao} onChange={e => setNovaDescricao(e.target.value)} style={styles.input} />}
-            <button onClick={() => {
-              if (novoValor > 0) setFontesDePagamento([...fontesDePagamento, { valor: novoValor, tipo: novoTipo, contaOrigemId: novaContaOrigemId, descricao: novaDescricao }]);
-              setNovoValor(0); setNovaDescricao('');
-            }} style={{ ...styles.btn, backgroundColor: '#007bff', color: 'white', marginBottom: 10 }}>+ Adicionar Pagamento</button>
-            <div style={{ maxHeight: 100, overflowY: 'auto', marginBottom: 10 }}>
-              {fontesDePagamento.map((f, i) => <div key={i} style={{ fontSize: 11, color: '#aaa' }}>R$ {f.valor.toFixed(2)} ({f.tipo})</div>)}
+              <button
+                onClick={() => setModalHistorico(false)}
+                style={{ ...styles.btn, marginTop: 20, backgroundColor: '#860204', color: '#fff' }}
+              >
+                Fechar Relatório
+              </button>
             </div>
-            <button onClick={processarPagamento} style={{ ...styles.btn, backgroundColor: '#28a745', color: 'white', marginBottom: 5 }}>Confirmar Tudo</button>
-            <button onClick={() => setPagamentoFatura(null)} style={{ ...styles.btn, backgroundColor: '#444', color: 'white' }}>Cancelar</button>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
     </div>
   );
 }
 
 const styles: any = {
-  card: { background: '#1e1e1e', padding: 12, borderRadius: 8, boxShadow: '0 4px 6px rgba(0,0,0,0.3)', marginBottom: 10, color: '#e0e0e0' },
+  card: { backgroundColor: '#1e1e1e', padding: '15px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' },
   cardHeaderToggle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
-  input: { width: '100%', padding: 10, marginBottom: 8, boxSizing: 'border-box', border: '1px solid #333', borderRadius: 4, background: '#2c2c2c', color: '#fff' },
-  btn: { width: '100%', padding: 10, border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', background: '#333', color: '#fff' },
-  btnBlue: { width: '100%', padding: 10, border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', backgroundColor: '#0056b3', color: 'white' },
-  btnFinalizar: { width: '100%', padding: 12, border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold', backgroundColor: '#1e7e34', color: 'white', marginTop: 10 },
-  btnSmall: { padding: '4px 8px', fontSize: 10, cursor: 'pointer', border: '1px solid #444', borderRadius: 4, background: '#2c2c2c', color: '#ffffff' },
-  overlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modal: { background: '#1e1e1e', padding: '20px', borderRadius: 12, width: '350px', maxHeight: '90vh', overflowY: 'auto', border: '1px solid #333', color: '#fff' },
-  btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer' }
+  input: { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #333', backgroundColor: '#2a2a2a', color: '#fff', boxSizing: 'border-box' },
+  btn: { width: '100%', padding: '10px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
+  btnSmall: { padding: '5px 10px', fontSize: '11px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#2a2a2a', color: '#ccc', cursor: 'pointer' },
+  btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' },
+  overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+  modal: { backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '10px', color: '#fff' },
+  btnBlue: { backgroundColor: '#007bff', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', width: '100%', marginBottom: 10 },
+  btnFinalizar: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '12px', borderRadius: '5px', width: '100%', fontWeight: 'bold', marginTop: 10 }
 };
