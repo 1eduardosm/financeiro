@@ -395,26 +395,24 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div>
+      {/* LISTAGEM DE CONTAS */}
+      <div style={{ marginTop: 20 }}>
         {contas.map((conta: any, idx: number) => {
-          // 1. DEFINIR O MÊS ATUAL PARA FILTRAGEM (Igual ao seu useMemo)
           const agora = new Date();
-          const mesAnoAtual = agora.toISOString().slice(0, 7); // Ex: "2024-05"
+          const mesAnoAtual = agora.toISOString().slice(0, 7);
 
-          // 2. FILTRAR MOVIMENTAÇÕES DESTA CONTA APENAS NO MÊS ATUAL
+          // FILTRA MOVIMENTAÇÕES DO MÊS DESTA CONTA
           const movimentacoesDestaContaMes = entradas.filter((m: any) => {
-            // Verifica se pertence à conta
             if (String(m.contaId) !== String(conta.id)) return false;
-
-            // Lógica de data idêntica à do seu useMemo para garantir consistência
+            
+            // Lógica para tratar datas em formato DD/MM/YYYY ou YYYY-MM-DD
             if (typeof m.data === 'string' && m.data.includes('/')) {
               const [, mes, ano] = m.data.split('/');
               return `${ano}-${mes}` === mesAnoAtual;
             }
-            return m.data.startsWith(mesAnoAtual);
+            return typeof m.data === 'string' && m.data.startsWith(mesAnoAtual);
           });
 
-          // 3. CALCULAR TOTAIS DO MÊS
           const totalEntradasConta = movimentacoesDestaContaMes
             .filter((m: any) => m.valor > 0)
             .reduce((acc: number, m: any) => acc + m.valor, 0);
@@ -428,10 +426,14 @@ export default function Dashboard() {
           return (
             <div key={conta.id} style={{ border: '1px solid #333', borderRadius: 8, padding: 12, marginBottom: 10, background: '#1e1e1e' }}>
 
-              {/* CABEÇALHO */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                <h3 onClick={() => setContasExpandidas({ ...contasExpandidas, [conta.id]: !contasExpandidas[conta.id] })} style={{ cursor: 'pointer', margin: 0 }}>
-                  {contasExpandidas[conta.id] ? "▼" : "▶"} {conta.nome} — R$ {saldoAtual.toFixed(2)}
+              {/* CABEÇALHO DA CONTA */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 
+                  onClick={() => setContasExpandidas({ ...contasExpandidas, [conta.id]: !contasExpandidas[conta.id] })} 
+                  style={{ cursor: 'pointer', margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: '10px' }}
+                >
+                  <span style={{ fontSize: 12, color: '#666' }}>{contasExpandidas[conta.id] ? "▼" : "▶"}</span>
+                  {conta.nome} — R$ {saldoAtual.toFixed(2)}
                 </h3>
 
                 <div style={{ display: 'flex', gap: 5 }}>
@@ -439,7 +441,7 @@ export default function Dashboard() {
                     <>
                       <button onClick={() => copiarPix(conta.pix)} style={styles.btnSmall}>Copiar PIX</button>
                       <button onClick={() => setEditPixInfo({ index: idx, chave: conta.pix })} style={styles.btnSmall}>Alterar</button>
-                      <button onClick={() => { if (window.confirm("Remover PIX?")) gerenciarPix(idx, null) }} style={{ ...styles.btnSmall, color: '#ff1100' }}>Remover</button>
+                      <button onClick={() => { if (window.confirm("Remover PIX?")) gerenciarPix(idx, null) }} style={{ ...styles.btnSmall, color: '#ff4444' }}>Remover</button>
                     </>
                   ) : (
                     <button onClick={() => setEditPixInfo({ index: idx, chave: "" })} style={styles.btnSmall}>+ Chave PIX</button>
@@ -447,47 +449,51 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* DASHBOARD DA CONTA (APENAS MÊS ATUAL) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: 20, padding: '10px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <small style={{ color: '#777', display: 'block' }}>Entradas (Mês)</small>
-                  <span style={{ color: '#00ff08', fontWeight: 'bold', fontSize: 14 }}>R$ {totalEntradasConta.toFixed(2)}</span>
-                </div>
-                <div style={{ textAlign: 'center', borderLeft: '1px solid #333', borderRight: '1px solid #333' }}>
-                  <small style={{ color: '#777', display: 'block' }}>Saídas (Mês)</small>
-                  <span style={{ color: '#ff1100', fontWeight: 'bold', fontSize: 14 }}>R$ {totalSaidasConta.toFixed(2)}</span>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <small style={{ color: '#777', display: 'block' }}>Saldo Atual</small>
-                  <span style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>R$ {saldoAtual.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* CONTEÚDO EXPANDIDO: Faturas */}
+              {/* CONTEÚDO EXPANDIDO (Dashboard + Faturas) */}
               {contasExpandidas[conta.id] && (
-                <div style={{ marginTop: 15, maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
-                  {(!conta.faturas || conta.faturas.length === 0) ? (
-                    <p style={{ fontSize: 13, color: '#777', textAlign: 'center', padding: '10px 0' }}>Sem faturas por aqui</p>
-                  ) : (
-                    conta.faturas
-                      .slice()
-                      .sort((a: any, b: any) => (a.mesAno || "").localeCompare(b.mesAno || ""))
-                      .map((f: any, fIdx: number) => (
-                        <div key={f.mesAno} style={{ padding: '10px 0', borderBottom: '1px solid #333' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <strong>{f.mesAno}</strong>
-                            <span style={{ color: f.pago ? '#4caf50' : '#f44336' }}>{f.pago ? "PAGA" : `R$ ${(f.valorTotal || 0).toFixed(2)}`}</span>
+                <div style={{ marginTop: 15 }}>
+                  
+                  {/* DASHBOARD MENSAL DA CONTA */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: 20, padding: '10px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <small style={{ color: '#777', display: 'block' }}>Entradas (Mês)</small>
+                      <span style={{ color: '#00ff08', fontWeight: 'bold', fontSize: 13 }}>R$ {totalEntradasConta.toFixed(2)}</span>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid #333', borderRight: '1px solid #333' }}>
+                      <small style={{ color: '#777', display: 'block' }}>Saídas (Mês)</small>
+                      <span style={{ color: '#ff1100', fontWeight: 'bold', fontSize: 13 }}>R$ {totalSaidasConta.toFixed(2)}</span>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <small style={{ color: '#777', display: 'block' }}>Saldo Final</small>
+                      <span style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>R$ {saldoAtual.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* LISTA DE FATURAS */}
+                  <div style={{ maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
+                    {(!conta.faturas || conta.faturas.length === 0) ? (
+                      <p style={{ fontSize: 13, color: '#777', textAlign: 'center', padding: '10px 0' }}>Sem faturas por aqui</p>
+                    ) : (
+                      conta.faturas
+                        .slice()
+                        .sort((a: any, b: any) => (a.mesAno || "").localeCompare(b.mesAno || ""))
+                        .map((f: any, fIdx: number) => (
+                          <div key={f.mesAno} style={{ padding: '10px 0', borderBottom: '1px solid #333' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <strong>{f.mesAno}</strong>
+                              <span style={{ color: f.pago ? '#4caf50' : '#f44336' }}>{f.pago ? "PAGA" : `R$ ${(f.valorTotal || 0).toFixed(2)}`}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#aaa', margin: '4px 0' }}>
+                              {(f.itens || []).map((it: any, i: number) => <div key={i}>• {it.nome} ({it.parcelaAtual}/{it.totalParcelas})</div>)}
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
+                              {!f.pago && <button onClick={() => setPagamentoFatura({ cIdx: idx, fIdx })} style={styles.btnSmall}>Abater</button>}
+                              <button onClick={() => setVerDetalhes(f.detalhesPagamento || [])} style={{ ...styles.btnSmall, backgroundColor: '#333', color: '#fff', border: 'none' }}>Histórico Pgto</button>
+                            </div>
                           </div>
-                          <div style={{ fontSize: 11, color: '#aaa', margin: '4px 0' }}>
-                            {(f.itens || []).map((it: any, i: number) => <div key={i}>• {it.nome} ({it.parcelaAtual}/{it.totalParcelas})</div>)}
-                          </div>
-                          <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
-                            {!f.pago && <button onClick={() => setPagamentoFatura({ cIdx: contas.indexOf(conta), fIdx })} style={styles.btnSmall}>Abater</button>}
-                            <button onClick={() => setVerDetalhes(f.detalhesPagamento)} style={{ ...styles.btnSmall, backgroundColor: '#333', color: '#fff', border: 'none' }}>Histórico Pgto</button>
-                          </div>
-                        </div>
-                      ))
-                  )}
+                        ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
