@@ -228,24 +228,53 @@ export default function Dashboard() {
     setCompraNome(""); setCompraValorTotal(0);
   };
 
-  const processarPagamento = async () => {
-    if (!pagamentoFatura) return;
-    const { cIdx, fIdx } = pagamentoFatura;
-    const nContas = [...contas];
-    const fat = nContas[cIdx].faturas[fIdx];
-    const totalSessao = fontesDePagamento.reduce((acc, f) => acc + (f.valor || 0), 0);
-    fat.valorTotal = (fat.valorTotal || 0) - totalSessao;
-    fat.detalhesPagamento = [...(fat.detalhesPagamento || []), ...fontesDePagamento];
-    if (fat.valorTotal <= 0.01) { fat.pago = true; fat.valorTotal = 0; }
-    fontesDePagamento.forEach(f => {
-      if (f.tipo === 'saldo') {
-        const cOrigem = nContas.find(c => c.id === f.contaOrigemId);
-        if (cOrigem) cOrigem.saldo = (cOrigem.saldo || 0) - f.valor;
+  const processarPagamento = () => {
+    if (fontesDePagamento.length === 0 || !pagamentoFatura) return;
+
+    const novasContas = [...contas];
+    const novasMovimentacoes: any[] = [];
+    const contaAlvo = novasContas[pagamentoFatura.cIdx];
+    const faturaAlvo = contaAlvo.faturas[pagamentoFatura.fIdx];
+
+    fontesDePagamento.forEach(fonte => {
+      if (fonte.tipo === 'saldo') {
+        const cIdxOrigem = novasContas.findIndex(c => String(c.id) === String(fonte.contaOrigemId));
+        if (cIdxOrigem !== -1) {
+          // 1. Reduz o saldo da conta de origem
+          novasContas[cIdxOrigem].saldo -= fonte.valor;
+
+          // 2. Cria a movimentação de saída para "limpar" a entrada no totalizador
+          novasMovimentacoes.push({
+            id: Date.now() + Math.random(),
+            contaId: fonte.contaOrigemId,
+            valor: -fonte.valor, // Valor negativo
+            tipo: 'saida',
+            descricao: `Pgto Fatura: ${faturaAlvo.mesAno} (${contaAlvo.nome})`,
+            categoria: 'Fatura',
+            data: new Date().toISOString()
+          });
+        }
       }
+      // Se tipo for 'terceiros', não gera saída pois o dinheiro nem passou pela sua conta
     });
-    setContas(nContas);
-    await atualizarFirebase(nContas, entradas);
-    setPagamentoFatura(null); setFontesDePagamento([]);
+
+    // Atualiza o valor restante da fatura
+    const totalPagoAgora = fontesDePagamento.reduce((acc, f) => acc + f.valor, 0);
+    faturaAlvo.valorTotal -= totalPagoAgora;
+
+    if (!faturaAlvo.detalhesPagamento) faturaAlvo.detalhesPagamento = [];
+    faturaAlvo.detalhesPagamento.push(...fontesDePagamento);
+
+    if (faturaAlvo.valorTotal <= 0) {
+      faturaAlvo.pago = true;
+      faturaAlvo.valorTotal = 0;
+    }
+
+    // Salva os estados
+    setContas(novasContas);
+    setEntradas([...entradas, ...novasMovimentacoes]); // Aqui os totalizadores se ajustam!
+    setPagamentoFatura(null);
+    setFontesDePagamento([]);
   };
 
   const gerenciarPix = async (index: number, novaChave: string | null) => {
@@ -359,23 +388,6 @@ export default function Dashboard() {
           <button onClick={() => setModalHistorico(true)} style={styles.btnSmall}>Explorar por Mês</button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: 20, padding: '10px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <small style={{ color: '#777', display: 'block' }}>Entradas</small>
-            <span style={{ color: '#00ff08', fontWeight: 'bold', fontSize: 14 }}>R$ {totalEntradas.toFixed(2)}</span>
-          </div>
-          <div style={{ textAlign: 'center', borderLeft: '1px solid #333', borderRight: '1px solid #333' }}>
-            <small style={{ color: '#777', display: 'block' }}>Saídas</small>
-            <span style={{ color: '#ff1100', fontWeight: 'bold', fontSize: 14 }}>R$ {totalSaidas.toFixed(2)}</span>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <small style={{ color: '#777', display: 'block' }}>Saldo</small>
-            <span style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>R$ {saldoTotal.toFixed(2)}</span>
-          </div>
-        </div>
-
-        <hr style={{ borderColor: '#333', marginBottom: 15 }} />
-
         <h5 style={{ margin: '0 0 10px 0', fontSize: 12, color: '#aaa', textTransform: 'uppercase' }}>Recentes (Este Mês)</h5>
         <div className="no-scroll" style={{ maxHeight: '200px', overflowY: 'auto' }}>
           {movimentacoesDoMes.length === 0 ? (
@@ -404,7 +416,7 @@ export default function Dashboard() {
           // FILTRA MOVIMENTAÇÕES DO MÊS DESTA CONTA
           const movimentacoesDestaContaMes = entradas.filter((m: any) => {
             if (String(m.contaId) !== String(conta.id)) return false;
-            
+
             // Lógica para tratar datas em formato DD/MM/YYYY ou YYYY-MM-DD
             if (typeof m.data === 'string' && m.data.includes('/')) {
               const [, mes, ano] = m.data.split('/');
@@ -428,8 +440,8 @@ export default function Dashboard() {
 
               {/* CABEÇALHO DA CONTA */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 
-                  onClick={() => setContasExpandidas({ ...contasExpandidas, [conta.id]: !contasExpandidas[conta.id] })} 
+                <h3
+                  onClick={() => setContasExpandidas({ ...contasExpandidas, [conta.id]: !contasExpandidas[conta.id] })}
                   style={{ cursor: 'pointer', margin: 0, fontSize: 16, display: 'flex', alignItems: 'center', gap: '10px' }}
                 >
                   <span style={{ fontSize: 12, color: '#666' }}>{contasExpandidas[conta.id] ? "▼" : "▶"}</span>
@@ -452,7 +464,7 @@ export default function Dashboard() {
               {/* CONTEÚDO EXPANDIDO (Dashboard + Faturas) */}
               {contasExpandidas[conta.id] && (
                 <div style={{ marginTop: 15 }}>
-                  
+
                   {/* DASHBOARD MENSAL DA CONTA */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: 20, padding: '10px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                     <div style={{ textAlign: 'center' }}>
