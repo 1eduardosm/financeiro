@@ -585,12 +585,45 @@ export default function Dashboard() {
               ) : (
                 <input type="text" placeholder="Quem pagou? (Ex: Mãe)" value={novaDescricao} onChange={e => setNovaDescricao(e.target.value)} style={styles.input} />
               )}
-              <input type="number" placeholder="R$ Valor a abater" value={novoValor || ""} onChange={e => setNovoValor(Number(e.target.value))} style={styles.input} />
+              <input
+                type="number"
+                placeholder="R$ Valor a abater"
+                value={novoValor || ""}
+                onChange={e => setNovoValor(Number(e.target.value))}
+                style={{
+                  ...styles.input,
+                  // Se for do tipo saldo e o valor for maior que o saldo da conta, a borda fica vermelha
+                  border: (novoTipo === 'saldo' && novoValor > (contas.find(c => c.id === novaContaOrigemId)?.saldo || 0))
+                    ? '2px solid #ff4d4d'
+                    : '1px solid #ccc'
+                }}
+              />
               <button onClick={() => {
+                // 1. Validação básica de valor zero ou negativo
                 if (novoValor <= 0) return;
-                setFontesDePagamento([...fontesDePagamento, { valor: novoValor, tipo: novoTipo, contaOrigemId: novaContaOrigemId, descricao: novaDescricao }]);
-                setNovoValor(0); setNovaDescricao("");
-              }} style={styles.btnBlue}>+ Adicionar Pagamento</button>
+
+                // 2. Validação de Saldo Insuficiente (apenas se o tipo for 'saldo')
+                if (novoTipo === 'saldo') {
+                  const contaSelecionada = contas.find(c => c.id === novaContaOrigemId);
+
+                  if (contaSelecionada && novoValor > contaSelecionada.saldo) {
+                    alert(`Saldo insuficiente nesta conta! Saldo disponível: R$ ${contaSelecionada.saldo.toFixed(2)}`);
+                    return; // Bloqueia a adição do pagamento
+                  }
+                }
+
+                // 3. Se passou nas validações, adiciona à lista
+                setFontesDePagamento([
+                  ...fontesDePagamento,
+                  { valor: novoValor, tipo: novoTipo, contaOrigemId: novaContaOrigemId, descricao: novaDescricao }
+                ]);
+
+                // Limpa os campos
+                setNovoValor(0);
+                setNovaDescricao("");
+              }} style={styles.btnBlue}>
+                + Adicionar Pagamento
+              </button>
             </div>
             <div style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: 15, background: '#000', padding: 10, borderRadius: 5 }}>
               {fontesDePagamento.map((f, i) => <div key={i} style={{ fontSize: 12 }}>R$ {f.valor.toFixed(2)} - {f.tipo === 'saldo' ? f.contaOrigemId : f.descricao}</div>)}
