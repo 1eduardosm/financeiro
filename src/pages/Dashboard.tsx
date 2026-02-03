@@ -228,37 +228,49 @@ export default function Dashboard() {
     setCompraNome(""); setCompraValorTotal(0);
   };
 
-  const processarPagamento = () => {
+  const processarPagamento = async () => {
     if (fontesDePagamento.length === 0 || !pagamentoFatura) return;
 
-    const novasContas = [...contas];
+    const novasContas = JSON.parse(JSON.stringify(contas));
     const novasMovimentacoes: any[] = [];
-    const contaAlvo = novasContas[pagamentoFatura.cIdx];
-    const faturaAlvo = contaAlvo.faturas[pagamentoFatura.fIdx];
 
+    // 1. Pega a conta alvo pelo índice (cIdx)
+    const contaAlvo = novasContas[pagamentoFatura.cIdx];
+
+    // 2. Busca a fatura pelo identificador mesAno (O segredo está aqui)
+    const faturaAlvo = contaAlvo.faturas.find((f: any) => f.mesAno === pagamentoFatura.mesAno);
+
+    if (!faturaAlvo) {
+      console.error("Fatura alvo:", pagamentoFatura.mesAno);
+      alert("Erro: Fatura não encontrada!");
+      return;
+    }
+
+    // 2. Processamos cada fonte de pagamento selecionada no modal
     fontesDePagamento.forEach(fonte => {
       if (fonte.tipo === 'saldo') {
-        const cIdxOrigem = novasContas.findIndex(c => String(c.id) === String(fonte.contaOrigemId));
-        if (cIdxOrigem !== -1) {
-          // 1. Reduz o saldo da conta de origem
-          novasContas[cIdxOrigem].saldo -= fonte.valor;
+        // Localizamos a conta de onde o dinheiro vai sair
+        const contaOrigem = novasContas.find((c: any) => String(c.id) === String(fonte.contaOrigemId));
 
-          // 2. Cria a movimentação de saída para "limpar" a entrada no totalizador
+        if (contaOrigem) {
+          // Subtrai o saldo da conta de origem
+          contaOrigem.saldo -= fonte.valor;
+
+          // Registra a movimentação de saída para o histórico
           novasMovimentacoes.push({
-            id: Date.now() + Math.random(),
-            contaId: fonte.contaOrigemId,
-            valor: -fonte.valor, // Valor negativo
-            tipo: 'saida',
+            valor: -fonte.valor,
             descricao: `Pgto Fatura: ${faturaAlvo.mesAno} (${contaAlvo.nome})`,
-            categoria: 'Fatura',
-            data: new Date().toISOString()
+            data: new Date().toISOString().slice(0, 10), // Formato YYYY-MM-DD
+            contaId: fonte.contaOrigemId,
+            tipo: 'saida',
+            categoria: 'Fatura'
           });
         }
       }
-      // Se tipo for 'terceiros', não gera saída pois o dinheiro nem passou pela sua conta
+      // Se for 'terceiros', não mexemos no saldo de nenhuma conta nossa
     });
 
-    // Atualiza o valor restante da fatura
+    // 3. Atualiza os valores da fatura alvo
     const totalPagoAgora = fontesDePagamento.reduce((acc, f) => acc + f.valor, 0);
     faturaAlvo.valorTotal -= totalPagoAgora;
 
@@ -270,13 +282,25 @@ export default function Dashboard() {
       faturaAlvo.valorTotal = 0;
     }
 
-    // Salva os estados
-    setContas(novasContas);
-    setEntradas([...entradas, ...novasMovimentacoes]); // Aqui os totalizadores se ajustam!
-    setPagamentoFatura(null);
-    setFontesDePagamento([]);
-  };
+    // 4. Persistência no Firebase (Usando sua função atualizarFirebase)
+    try {
+      const listaEntradasAtualizada = [...novasMovimentacoes, ...entradas];
 
+      // Chamamos sua função que já trata o UID e a estrutura do Firebase
+      await atualizarFirebase(novasContas, listaEntradasAtualizada);
+
+      // 5. Atualizamos o estado local apenas se o Firebase retornar sucesso
+      setContas(novasContas);
+      setEntradas(listaEntradasAtualizada);
+      setPagamentoFatura(null);
+      setFontesDePagamento([]);
+
+      alert("Abatimento realizado com sucesso!");
+    } catch (e) {
+      console.error("Erro ao salvar pagamento:", e);
+      alert("Erro ao salvar no banco de dados. Verifique sua conexão.");
+    }
+  };
   const gerenciarPix = async (index: number, novaChave: string | null) => {
     const nContas = [...contas];
     const chaveLimpa = novaChave ? novaChave.trim() : "";
@@ -499,7 +523,12 @@ export default function Dashboard() {
                               {(f.itens || []).map((it: any, i: number) => <div key={i}>• {it.nome} ({it.parcelaAtual}/{it.totalParcelas})</div>)}
                             </div>
                             <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
-                              {!f.pago && <button onClick={() => setPagamentoFatura({ cIdx: idx, fIdx })} style={styles.btnSmall}>Abater</button>}
+                              {!f.pago && <button
+                                onClick={() => setPagamentoFatura({ cIdx: idx, mesAno: f.mesAno })} // Certifique-se que o f.mesAno está aqui!
+                                style={styles.btnSmall}
+                              >
+                                Abater
+                              </button>}
                               <button onClick={() => setVerDetalhes(f.detalhesPagamento || [])} style={{ ...styles.btnSmall, backgroundColor: '#333', color: '#fff', border: 'none' }}>Histórico Pgto</button>
                             </div>
                           </div>
@@ -578,6 +607,7 @@ export default function Dashboard() {
                 <option value="saldo">Saldo de uma Conta</option>
                 <option value="terceiros">Dinheiro Externo / Terceiros</option>
               </select>
+
               {novoTipo === 'saldo' ? (
                 <select value={novaContaOrigemId} onChange={e => setNovaContaOrigemId(e.target.value)} style={styles.input}>
                   {contas.map(c => <option key={c.id} value={c.id}>{c.nome} (Saldo: R$ {c.saldo.toFixed(2)})</option>)}
@@ -585,6 +615,7 @@ export default function Dashboard() {
               ) : (
                 <input type="text" placeholder="Quem pagou? (Ex: Mãe)" value={novaDescricao} onChange={e => setNovaDescricao(e.target.value)} style={styles.input} />
               )}
+
               <input
                 type="number"
                 placeholder="R$ Valor a abater"
@@ -592,44 +623,57 @@ export default function Dashboard() {
                 onChange={e => setNovoValor(Number(e.target.value))}
                 style={{
                   ...styles.input,
-                  // Se for do tipo saldo e o valor for maior que o saldo da conta, a borda fica vermelha
-                  border: (novoTipo === 'saldo' && novoValor > (contas.find(c => c.id === novaContaOrigemId)?.saldo || 0))
+                  border: (novoTipo === 'saldo' && novoValor > ((contas.find(c => String(c.id) === String(novaContaOrigemId))?.saldo || 0) - fontesDePagamento.filter(f => f.tipo === 'saldo' && String(f.contaOrigemId) === String(novaContaOrigemId)).reduce((acc, f) => acc + f.valor, 0)))
                     ? '2px solid #ff4d4d'
                     : '1px solid #ccc'
                 }}
               />
+
               <button onClick={() => {
-                // 1. Validação básica de valor zero ou negativo
                 if (novoValor <= 0) return;
 
-                // 2. Validação de Saldo Insuficiente (apenas se o tipo for 'saldo')
                 if (novoTipo === 'saldo') {
-                  const contaSelecionada = contas.find(c => c.id === novaContaOrigemId);
+                  const contaSelecionada = contas.find(c => String(c.id) === String(novaContaOrigemId));
 
-                  if (contaSelecionada && novoValor > contaSelecionada.saldo) {
-                    alert(`Saldo insuficiente nesta conta! Saldo disponível: R$ ${contaSelecionada.saldo.toFixed(2)}`);
-                    return; // Bloqueia a adição do pagamento
+                  if (contaSelecionada) {
+                    const totalJaAdicionadoDestaConta = fontesDePagamento
+                      .filter(f => f.tipo === 'saldo' && String(f.contaOrigemId) === String(novaContaOrigemId))
+                      .reduce((acc, f) => acc + f.valor, 0);
+
+                    const saldoDisponivelReal = contaSelecionada.saldo - totalJaAdicionadoDestaConta;
+
+                    if (novoValor > saldoDisponivelReal) {
+                      alert(
+                        `Saldo insuficiente! \n` +
+                        `Saldo na conta: R$ ${contaSelecionada.saldo.toFixed(2)}\n` +
+                        `Já reservado na lista: R$ ${totalJaAdicionadoDestaConta.toFixed(2)}\n` +
+                        `Disponível agora: R$ ${saldoDisponivelReal.toFixed(2)}`
+                      );
+                      return;
+                    }
                   }
                 }
 
-                // 3. Se passou nas validações, adiciona à lista
                 setFontesDePagamento([
                   ...fontesDePagamento,
                   { valor: novoValor, tipo: novoTipo, contaOrigemId: novaContaOrigemId, descricao: novaDescricao }
                 ]);
 
-                // Limpa os campos
                 setNovoValor(0);
                 setNovaDescricao("");
               }} style={styles.btnBlue}>
                 + Adicionar Pagamento
               </button>
             </div>
+
             <div style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: 15, background: '#000', padding: 10, borderRadius: 5 }}>
               {fontesDePagamento.map((f, i) => <div key={i} style={{ fontSize: 12 }}>R$ {f.valor.toFixed(2)} - {f.tipo === 'saldo' ? f.contaOrigemId : f.descricao}</div>)}
             </div>
+
+            {/* BOTÃO CORRETO PARA O MODAL: Confirmar Abatimento */}
             <button onClick={processarPagamento} style={styles.btnFinalizar}>Confirmar Abatimento</button>
-            <button onClick={() => setPagamentoFatura(null)} style={{ ...styles.btn, marginTop: 10, backgroundColor: '#444' }}>Fechar</button>
+
+            <button onClick={() => { setPagamentoFatura(null); setFontesDePagamento([]); }} style={{ ...styles.btn, marginTop: 10, backgroundColor: '#444' }}>Fechar</button>
           </div>
         </div>
       )}
