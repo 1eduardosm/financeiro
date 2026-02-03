@@ -93,7 +93,7 @@ export default function Dashboard() {
   }, [uid]);
 
   // --- LÓGICA DE FILTRAGEM COM useMemo PARA ATUALIZAÇÃO EM TEMPO REAL ---
-  const { movimentacoesDoMes, totalEntradas, totalSaidas, saldoTotal } = useMemo(() => {
+  const { movimentacoesDoMes} = useMemo(() => {
     const agora = new Date();
     const mesAnoAtual = agora.toISOString().slice(0, 7); // Ex: "2024-05"
 
