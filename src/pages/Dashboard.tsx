@@ -316,18 +316,7 @@ export default function Dashboard() {
     alert("Chave PIX copiada!");
   };
 
-  const styles: any = {
-    overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-    modal: { backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', position: 'relative' },
-    card: { backgroundColor: '#1e1e1e', padding: '15px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' },
-    cardHeaderToggle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
-    input: { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #333', backgroundColor: '#2a2a2a', color: '#fff', boxSizing: 'border-box' },
-    btn: { width: '100%', padding: '10px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
-    btnSmall: { padding: '5px 10px', fontSize: '11px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#2a2a2a', color: '#ccc', cursor: 'pointer' },
-    btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' },
-    btnBlue: { backgroundColor: '#007bff', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', width: '100%', marginBottom: 10 },
-    btnFinalizar: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '12px', borderRadius: '5px', width: '100%', fontWeight: 'bold', marginTop: 10 }
-  };
+  
 
   if (loading) return <div style={{ padding: 20, backgroundColor: '#121212', color: '#fff', height: '100vh' }}>Carregando...</div>;
 
@@ -752,14 +741,14 @@ export default function Dashboard() {
 }
 
 const styles: any = {
-  card: { backgroundColor: '#1e1e1e', padding: '15px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' },
-  cardHeaderToggle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
-  input: { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #333', backgroundColor: '#2a2a2a', color: '#fff', boxSizing: 'border-box' },
-  btn: { width: '100%', padding: '10px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
-  btnSmall: { padding: '5px 10px', fontSize: '11px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#2a2a2a', color: '#ccc', cursor: 'pointer' },
-  btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' },
-  overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
-  modal: { backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '10px', color: '#fff' },
-  btnBlue: { backgroundColor: '#007bff', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', width: '100%', marginBottom: 10 },
-  btnFinalizar: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '12px', borderRadius: '5px', width: '100%', fontWeight: 'bold', marginTop: 10 }
-};
+    overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
+    modal: { backgroundColor: '#1e1e1e', padding: '20px', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', position: 'relative' },
+    card: { backgroundColor: '#1e1e1e', padding: '15px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' },
+    cardHeaderToggle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
+    input: { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #333', backgroundColor: '#2a2a2a', color: '#fff', boxSizing: 'border-box' },
+    btn: { width: '100%', padding: '10px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
+    btnSmall: { padding: '5px 10px', fontSize: '11px', borderRadius: '4px', border: '1px solid #444', backgroundColor: '#2a2a2a', color: '#ccc', cursor: 'pointer' },
+    btnLogout: { backgroundColor: '#860204', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' },
+    btnBlue: { backgroundColor: '#007bff', color: 'white', border: 'none', padding: '8px', borderRadius: '5px', width: '100%', marginBottom: 10 },
+    btnFinalizar: { backgroundColor: '#28a745', color: 'white', border: 'none', padding: '12px', borderRadius: '5px', width: '100%', fontWeight: 'bold', marginTop: 10 }
+  };
